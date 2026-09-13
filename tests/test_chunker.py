@@ -108,3 +108,20 @@ def test_jitter_and_respelling_do_not_drop_or_duplicate() -> None:
     assert texts == ["t6", "t7", "t8", "t9", "t6", "t7"], [(t.text, t.start.seconds) for t in out]
     for t, expected in zip(out, sorted(spikes), strict=True):
         assert abs(t.start.seconds - expected) <= 0.11
+
+
+def test_resolved_until_is_a_promise() -> None:
+    """No token is ever emitted with a start before a previously reported resolved_until."""
+    cfg = ChunkingConfig(
+        window_s=4.0, hop_s=0.5, resolve_margin_s=0.5, agree_s=0.3, edge_guard_s=0.5
+    )
+    pcm = _audio_with_spikes(9.0, {0.3: 0.6, 1.2: 0.7, 2.9: 0.8, 4.05: 0.9, 5.5: 0.6, 7.7: 0.7})
+    rec: Recognizer[Live] = Recognizer(Live, JitterBackend(), cfg)
+    promised = 0
+    for start in range(0, len(pcm), 1024):
+        toks = rec.feed(
+            Frames(Live, pcm[start : start + 1024], TransportTime(start, ANALYSIS_RATE))
+        )
+        assert all(t.start.samples >= promised for t in toks)
+        promised = rec.resolved_until.samples
+    assert all(t.start.samples >= promised for t in rec.flush())

@@ -185,9 +185,12 @@ All exposed on `run`/`replay`; defaults in `offbook/config.py`.
 | `--max-lag` | 1.5 s | extra lateness a live token may have and still be paired |
 | `--window-tokens` | 12 (phoneme: 48) | reference tokens held in the edit-distance window |
 | `--timing-weight` | 0.5 | weight of a `FAIL_TIMING` relative to a lexical failure (0–1) |
-| `--window-s` / `--hop-s` / `--margin-s` | 30 / 2 / 2 s | recognizer window, hop, and how much of the window's tail stays tentative |
+| `--window-s` / `--hop-s` / `--margin-s` | 30 / 2 / 3 s | recognizer window, hop, and how much of the window's tail stays tentative |
 | `--agree-s` | 0.3 s | two consecutive decodes must agree on a token (same text, start within this) before it is emitted |
 | `--edge-guard-s` | 1.0 s | tokens starting this close to a window's left edge are ignored (cut-off phrases decode badly) |
+| `confirm_timeout_s` (config/web) | 4 s | a token unconfirmed this long past the resolve line is emitted anyway |
+| `frontier_lag_s` (config/web) | 4 s | how far the stream's resolved frontier trails the resolve line, so late-surfacing tokens still land ahead of it |
+| `score_past_reference_end` (config/web) | off | count what is sung after the reference vocal's last word as inserted; off = ignore it |
 | `--dtype` | float32 | MLX weight dtype (`bfloat16` halves memory) |
 | `--share-weights` | off | one weight set shared by the two recognizer instances |
 
@@ -238,7 +241,11 @@ concurrently. See *Tuning transcription* below for why the window is 30 s.
 
 Tokens are held until *decidable* — a reference token once the live stream has resolved
 past `start + tolerance + max_lag`, a live token once the reference stream has resolved
-past `start + tolerance`. The pending window is re-aligned with Levenshtein DP whose
+past `start + tolerance`. "Resolved" is each recognizer's promise that no further token
+will start before that time; it trails the decode by `frontier_lag_s`, so the verdict for
+a word lands roughly `margin + frontier_lag + hop` ≈ 9 s after it is sung. That delay is
+the price of not deciding a region one stream may still add a token to — deciding early
+is how a late-surfacing token turns one MATCH into a MISSED plus an INSERTED. The pending window is re-aligned with Levenshtein DP whose
 substitution cost carries lexical distance (0/1 for words, normalized edit distance over
 IPA characters for phonemes) and a timing penalty; unpairable pairs (outside
 `[−tolerance, tolerance + max_lag]`) cost ∞. A beat-late singer is still paired.
@@ -257,6 +264,18 @@ score      = 100 · match_rate · min(1, transport_position / reference_duration
 ```
 
 The score climbs from zero through the song and lands on `100 · match_rate`.
+
+Two policies that keep the score honest:
+
+- **After the reference vocal's last word, nothing is scored.** A live token that no
+  reference token seen so far could pair with waits until the reference stream has
+  finished (a later reference phrase may still arrive — an ad-lib during an instrumental
+  break *is* inserted once the next phrase shows up); if the reference ends without one,
+  the token is ignored and counted in the record's
+  `live_tokens_ignored_after_reference_end`. Talking over the outro does not cost points.
+  `score_past_reference_end` turns the old behaviour back on.
+- **Breath tokens are not words.** The word recognizer emits "uh"/"hmm"-type tokens on
+  sung intakes; both streams drop them in normalization.
 
 ## Tuning transcription
 
@@ -286,7 +305,8 @@ streaming chunker against the one-shot decode; lower is better):
 | 6 / 1 / 1 with the original frontier chunker | ≈ 0.6 | — |
 | 15 / 1 / 1.5 | 0.169 | — |
 | 20 / 2 / 2 | 0.091 | 0.191 |
-| **30 / 2 / 2** (default) | **0.065** | **0.136** |
+| 30 / 2 / 2 | 0.065 | 0.136 |
+| **30 / 2 / 3** (default) | 0.065 | 0.143 |
 
 Two things did the work: long windows (a 6 s window cuts phrases and starves the model of
 context) and *agreement* (recognizer timestamps jitter by 80–160 ms between overlapping
@@ -298,10 +318,16 @@ chunker sits at 0.10–0.17 against 30–60 s one-shot decodes (its one-shot dec
 5-minute file is itself degraded — wav2vec2 does not like long inputs — so compare it on
 `--seconds 60`).
 
+On a second, shorter vocal (45 s, clean diction) the default chunker matches the one-shot
+decode exactly: error rate 0.000, 56/56 tokens. Replaying a real 45 s performance of it
+against that reference: 87.7, where every failure is a genuine word difference between
+what was sung and what the reference has.
+
 Cost of the 30 s window: about 0.35 s of inference per 2 s hop per stream on the M4, so
-roughly a third of real time for both streams. Emission latency is `margin + hop` ≈ 4 s
-after a word is sung; the comparison aligns on transport timestamps, so this only delays
-the readout, not the verdicts.
+roughly a third of real time for both streams. A word's tokens are emitted `margin + hop`
+≈ 5 s after it is sung and its verdict lands ≈ 9 s after (see *Comparison and score*);
+the comparison aligns on transport timestamps, so this delays the readout, not the
+result.
 
 ## Session record
 

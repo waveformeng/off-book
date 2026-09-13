@@ -42,9 +42,12 @@ def phoneme_distance(a: str, b: str) -> float:
 
 
 class Aligner:
-    def __init__(self, cfg: AlignmentConfig, unit: Unit) -> None:
+    def __init__(self, cfg: AlignmentConfig, unit: Unit, reference_end_s: float = _INF) -> None:
         self.cfg = cfg
         self.unit = unit
+        self._reference_end_s = reference_end_s
+        self._last_ref_start_s = -_INF
+        self.ignored_after_end = 0
         self._lex: Callable[[str, str], float] = (
             word_distance if unit == "word" else phoneme_distance
         )
@@ -62,6 +65,10 @@ class Aligner:
                 raise TypeError("add_reference given a non-Reference token")
         self._ref.extend(tokens)
         self._ref.sort(key=lambda t: t.start.samples)
+        if tokens:
+            self._last_ref_start_s = max(
+                self._last_ref_start_s, max(t.start.seconds for t in tokens)
+            )
 
     def add_live(self, tokens: list[Token[Live]]) -> None:
         for t in tokens:
@@ -86,6 +93,32 @@ class Aligner:
 
     def _live_decidable(self, live: Token[Live]) -> bool:
         return self._ref_resolved >= live.start.seconds + self.cfg.tolerance_s
+
+    def _past_reference(self, live: Token[Live]) -> bool:
+        """No reference token seen so far could pair with this live token."""
+        return (
+            live.start.seconds > self._last_ref_start_s + self.cfg.tolerance_s + self.cfg.max_lag_s
+        )
+
+    def _reference_finished(self) -> bool:
+        return self._ref_resolved >= self._reference_end_s
+
+    def _insertable(self, live: Token[Live]) -> bool:
+        """A live token with no counterpart becomes FAIL_INSERTED — unless it was sung after
+        the reference vocal's last token. Those wait until the reference has finished (a
+        later reference token may still turn up) and are then ignored, not scored."""
+        if not self._live_decidable(live):
+            return False
+        if self.cfg.score_past_reference_end or not self._past_reference(live):
+            return True
+        return False
+
+    def _ignorable(self, live: Token[Live]) -> bool:
+        return (
+            not self.cfg.score_past_reference_end
+            and self._past_reference(live)
+            and self._reference_finished()
+        )
 
     def _pairable(self, r: Token[Reference], live: Token[Live]) -> bool:
         dt = live.start.seconds - r.start.seconds
@@ -131,24 +164,22 @@ class Aligner:
                 used_ref.add(id(r))
                 used_live.add(id(live))
         for live in lives:
-            if (
-                id(live) not in paired_live
-                and live.start.seconds < insert_limit
-                and self._live_decidable(live)
-            ):
-                emitted.append(TokenPair(None, live, Verdict.FAIL_INSERTED))
-                used_live.add(id(live))
+            if id(live) not in paired_live and live.start.seconds < insert_limit:
+                if self._insertable(live):
+                    emitted.append(TokenPair(None, live, Verdict.FAIL_INSERTED))
+                    used_live.add(id(live))
         # Live tokens older than the reference window can never pair with anything
         # still pending; decide them now so the window keeps moving.
         if refs:
             for live in self._live:
-                if (
-                    id(live) not in used_live
-                    and live.start.seconds < lo
-                    and self._live_decidable(live)
-                ):
+                if id(live) not in used_live and live.start.seconds < lo and self._insertable(live):
                     emitted.append(TokenPair(None, live, Verdict.FAIL_INSERTED))
                     used_live.add(id(live))
+        # Sung after the reference's last token, and the reference is over: not scored.
+        for live in self._live:
+            if id(live) not in used_live and self._ignorable(live):
+                self.ignored_after_end += 1
+                used_live.add(id(live))
 
         self._ref = [t for t in self._ref if id(t) not in used_ref]
         self._live = [t for t in self._live if id(t) not in used_live]

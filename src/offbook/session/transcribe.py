@@ -42,6 +42,7 @@ class TranscribeResult:
     chunked: list[Token[Reference]]
     full: list[RawToken] | None
     error_rate_vs_full: float | None
+    late_tokens: int
 
 
 def _analysis_pcm(reference: ReferencePCM) -> NDArray[np.float32]:
@@ -87,13 +88,16 @@ def transcribe_reference(
         if one_shot is not None
         else None
     )
-    return TranscribeResult(chunked, one_shot, rate)
+    return TranscribeResult(chunked, one_shot, rate, recognizer.late_tokens)
 
 
 def print_result(result: TranscribeResult, path: Path, console: Console | None = None) -> None:
     console = console or Console(highlight=False)
     console.print(f"[bold]{path}[/bold]")
-    console.print(f"[dim]streaming chunker: {len(result.chunked)} tokens[/dim]")
+    console.print(
+        f"[dim]streaming chunker: {len(result.chunked)} tokens, "
+        f"{result.late_tokens} emitted behind the resolved frontier[/dim]"
+    )
     console.print(
         "  " + " ".join(f"{t.text}[dim]@{t.start.seconds:.1f}[/dim]" for t in result.chunked)
     )

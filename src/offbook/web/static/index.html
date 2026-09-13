@@ -145,6 +145,8 @@
         <div><label>Window (reference tokens)</label><input type="number" step="1" id="window_tokens"></div>
         <div><label>Timing-fail weight (0–1)</label><input type="number" step="0.05" min="0" max="1" id="timing_fail_weight"></div>
         <div id="f-phth"><label>Phoneme match threshold</label><input type="number" step="0.01" min="0" max="1" id="phoneme_match_threshold"></div>
+        <div><label>After the reference ends</label>
+          <select id="score_past_reference_end"><option value="false">ignore what is sung</option><option value="true">count it as inserted</option></select></div>
       </div>
     </details>
     <details style="margin-top:10px">
@@ -155,6 +157,8 @@
         <div><label>Resolve margin (s)</label><input type="number" step="0.25" id="resolve_margin_s"></div>
         <div><label>Agreement tolerance (s)</label><input type="number" step="0.05" id="agree_s"></div>
         <div><label>Left-edge guard (s)</label><input type="number" step="0.25" id="edge_guard_s"></div>
+        <div><label>Confirm timeout (s)</label><input type="number" step="0.5" id="confirm_timeout_s"></div>
+        <div><label>Frontier lag (s)</label><input type="number" step="0.5" id="frontier_lag_s"></div>
       </div>
       <p class="hint">Long windows matter: 30 s is within a few percent of decoding the whole file at once; 6 s is not.</p>
     </details>
@@ -235,7 +239,7 @@ const api = async (path, opts) => {
 // ---- state ------------------------------------------------------------------------------
 let mode = "live", impl = "parakeet", defaults = null, refDuration = null;
 const ALIGN = ["tolerance_s", "max_lag_s", "window_tokens", "timing_fail_weight", "phoneme_match_threshold"];
-const CHUNK = ["window_s", "hop_s", "resolve_margin_s", "agree_s", "edge_guard_s"];
+const CHUNK = ["window_s", "hop_s", "resolve_margin_s", "agree_s", "edge_guard_s", "confirm_timeout_s", "frontier_lag_s"];
 
 function setMode(m) {
   mode = m;
@@ -256,6 +260,7 @@ function setImpl(i, resetKnobs) {
 function applyDefaults() {
   const d = defaults[impl === "parakeet" ? "word" : "phoneme"];
   for (const k of ALIGN) $(k).value = d.alignment[k];
+  $("score_past_reference_end").value = String(d.alignment.score_past_reference_end);
   for (const k of CHUNK) $(k).value = d.chunking[k];
   $("dtype").value = d.recognizer.dtype;
   $("share_weights").value = String(d.recognizer.share_weights);
@@ -263,6 +268,7 @@ function applyDefaults() {
 function buildConfig() {
   const alignment = {}, chunking = {};
   for (const k of ALIGN) alignment[k] = Number($(k).value);
+  alignment.score_past_reference_end = $("score_past_reference_end").value === "true";
   for (const k of CHUNK) chunking[k] = Number($(k).value);
   return { alignment, chunking, recognizer: { impl, dtype: $("dtype").value, share_weights: $("share_weights").value === "true" } };
 }

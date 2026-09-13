@@ -31,6 +31,12 @@
           "title": "Timing Fail Weight",
           "type": "number"
         },
+        "score_past_reference_end": {
+          "default": false,
+          "description": "Score live tokens sung after the reference vocal has ended (else ignored)",
+          "title": "Score Past Reference End",
+          "type": "boolean"
+        },
         "phoneme_match_threshold": {
           "default": 0.34,
           "description": "Phoneme mode: max normalized edit distance still counted as MATCH",
@@ -61,7 +67,7 @@
           "type": "number"
         },
         "resolve_margin_s": {
-          "default": 2.0,
+          "default": 3.0,
           "description": "Tokens ending within this of the window end stay tentative",
           "minimum": 0,
           "title": "Resolve Margin S",
@@ -79,6 +85,20 @@
           "description": "Tokens starting within this of the window's left edge are ignored",
           "minimum": 0,
           "title": "Edge Guard S",
+          "type": "number"
+        },
+        "confirm_timeout_s": {
+          "default": 4.0,
+          "description": "A token still unconfirmed this long past the resolve line is emitted anyway",
+          "minimum": 0,
+          "title": "Confirm Timeout S",
+          "type": "number"
+        },
+        "frontier_lag_s": {
+          "default": 4.0,
+          "description": "resolved_until trails the resolve line by this, so tokens the recognizer produces late (phrase onsets after silence) still land ahead of it",
+          "minimum": 0,
+          "title": "Frontier Lag S",
           "type": "number"
         }
       },
@@ -303,9 +323,11 @@
           "default": {
             "window_s": 30.0,
             "hop_s": 2.0,
-            "resolve_margin_s": 2.0,
+            "resolve_margin_s": 3.0,
             "agree_s": 0.3,
-            "edge_guard_s": 1.0
+            "edge_guard_s": 1.0,
+            "confirm_timeout_s": 4.0,
+            "frontier_lag_s": 4.0
           }
         },
         "alignment": {
@@ -315,6 +337,7 @@
             "max_lag_s": 1.5,
             "window_tokens": 12,
             "timing_fail_weight": 0.5,
+            "score_past_reference_end": false,
             "phoneme_match_threshold": 0.34
           }
         },
@@ -459,6 +482,12 @@
     },
     "drift": {
       "$ref": "#/$defs/DriftRecord"
+    },
+    "live_tokens_ignored_after_reference_end": {
+      "default": 0,
+      "description": "Live tokens sung after the reference ended, not scored",
+      "title": "Live Tokens Ignored After Reference End",
+      "type": "integer"
     },
     "session_duration_s": {
       "title": "Session Duration S",

@@ -121,6 +121,9 @@ class SessionRecord(BaseModel, frozen=True):
     match_rate: float
     final_score: float
     drift: DriftRecord
+    live_tokens_ignored_after_reference_end: int = Field(
+        default=0, description="Live tokens sung after the reference ended, not scored"
+    )
     session_duration_s: float
     error: str | None = None
 

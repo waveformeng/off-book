@@ -101,3 +101,36 @@ def test_repeated_tokens_pair_with_their_own_occurrence() -> None:
     pairs = _run(ref, live, AlignmentConfig(window_tokens=12))
     assert [p.verdict for p in pairs] == [Verdict.MATCH] * 30
     assert all(p.dt_s == 0.0 for p in pairs)
+
+
+def test_live_tokens_after_reference_end_are_ignored_not_inserted() -> None:
+    ref = [_ref(w, 0.5 * i) for i, w in enumerate(WORDS[:4])]  # last reference token at 1.5 s
+    live = [_live(w, 0.5 * i) for i, w in enumerate(WORDS[:4])]
+    chatter = [_live(w, 6.0 + 0.3 * i) for i, w in enumerate(["so", "how", "did", "i", "do"])]
+    a = Aligner(AlignmentConfig(), "word", reference_end_s=5.0)
+    a.add_reference(ref)
+    a.add_live(live + chatter)
+    # Reference not finished yet: chatter must wait, not be decided.
+    pairs = a.advance(_tt(4.0), _tt(8.0))
+    assert all(p.verdict is Verdict.MATCH for p in pairs) and len(pairs) == 4
+    assert a.finish() == []
+    assert a.ignored_after_end == 5
+
+
+def test_adlib_during_a_break_is_still_inserted_when_the_song_goes_on() -> None:
+    ref = [_ref("alpha", 0.0), _ref("bravo", 0.5), _ref("charlie", 10.0)]
+    live = [_live("alpha", 0.0), _live("bravo", 0.5), _live("yeah", 5.0), _live("charlie", 10.0)]
+    a = Aligner(AlignmentConfig(), "word", reference_end_s=12.0)
+    a.add_reference(ref[:2])
+    a.add_live(live[:3])
+    assert [p.verdict for p in a.advance(_tt(8.0), _tt(8.0))] == [Verdict.MATCH, Verdict.MATCH]
+    a.add_reference(ref[2:])  # the next phrase arrives: the ad-lib is now decidable
+    a.add_live(live[3:])
+    v = _verdicts(a.advance(_tt(13.0), _tt(13.0)))
+    assert ("-", "yeah", Verdict.FAIL_INSERTED) in v and ("charlie", "charlie", Verdict.MATCH) in v
+
+
+def test_scoring_past_reference_end_can_be_enabled() -> None:
+    a = Aligner(AlignmentConfig(score_past_reference_end=True), "word", reference_end_s=1.0)
+    a.add_live([_live("late", 5.0)])
+    assert _verdicts(a.finish()) == [("-", "late", Verdict.FAIL_INSERTED)]

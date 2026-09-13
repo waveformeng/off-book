@@ -18,7 +18,7 @@ class ChunkingConfig(BaseModel, frozen=True):
     window_s: float = Field(default=30.0, gt=0, description="Audio re-decoded on every hop")
     hop_s: float = Field(default=2.0, gt=0, description="New audio between decodes")
     resolve_margin_s: float = Field(
-        default=2.0, ge=0, description="Tokens ending within this of the window end stay tentative"
+        default=3.0, ge=0, description="Tokens ending within this of the window end stay tentative"
     )
     agree_s: float = Field(
         default=0.3,
@@ -29,6 +29,17 @@ class ChunkingConfig(BaseModel, frozen=True):
         default=1.0,
         ge=0,
         description="Tokens starting within this of the window's left edge are ignored",
+    )
+    confirm_timeout_s: float = Field(
+        default=4.0,
+        ge=0,
+        description="A token still unconfirmed this long past the resolve line is emitted anyway",
+    )
+    frontier_lag_s: float = Field(
+        default=4.0,
+        ge=0,
+        description="resolved_until trails the resolve line by this, so tokens the recognizer "
+        "produces late (phrase onsets after silence) still land ahead of it",
     )
 
 
@@ -46,6 +57,10 @@ class AlignmentConfig(BaseModel, frozen=True):
     )
     timing_fail_weight: float = Field(
         default=0.5, ge=0, le=1, description="Weight of a FAIL_TIMING relative to a lexical failure"
+    )
+    score_past_reference_end: bool = Field(
+        default=False,
+        description="Score live tokens sung after the reference vocal has ended (else ignored)",
     )
     phoneme_match_threshold: float = Field(
         default=0.34,

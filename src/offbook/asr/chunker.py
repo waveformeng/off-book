@@ -7,8 +7,17 @@ Every `hop` samples, the last `window` samples are re-decoded. A token is emitte
     into the middle of a phrase decodes badly),
   * the previous decode produced the same token, with its start within `agree`
     (recognizer timestamps jitter between overlapping windows; a token that only one
-    decode saw is not trusted yet), and
+    decode saw is not trusted yet) — or it has sat unconfirmed for `confirm_timeout`
+    past the resolve line, in which case the current decode's version goes out, and
   * nothing overlapping it has been emitted already.
+
+`resolved_until` is the stream's promise that no further token will start before it, and
+the aligner decides nothing past a promise. It trails the resolve line by `frontier_lag`,
+because recognizers produce some tokens late — a phrase onset after a long instrumental
+gap can surface several seconds after it was sung — and it never passes the start of a
+token still waiting for confirmation (the confirm timeout bounds how far it can trail).
+A token that still turns up behind the promise is emitted anyway and counted in
+`late_tokens`; the aligner may or may not still have a partner for it.
 
 Chunk boundaries are functions of sample counts only, so the same audio produces the
 same windows, the same tokens and the same timestamps every run, regardless of callback
@@ -52,6 +61,8 @@ class Recognizer(Generic[Role]):
         self._margin = int(round(chunking.resolve_margin_s * ANALYSIS_RATE))
         self._agree = int(round(chunking.agree_s * ANALYSIS_RATE))
         self._edge = int(round(chunking.edge_guard_s * ANALYSIS_RATE))
+        self._timeout = int(round(chunking.confirm_timeout_s * ANALYSIS_RATE))
+        self._lag = int(round(chunking.frontier_lag_s * ANALYSIS_RATE))
 
         self._buf: NDArray[np.float32] = np.zeros(0, dtype=np.float32)
         self._buf_start = 0  # absolute sample index of _buf[0]
@@ -60,6 +71,8 @@ class Recognizer(Generic[Role]):
         self._resolved_until = 0
         self._previous: list[_Abs] = []  # every token of the previous decode
         self._emitted: list[_Abs] = []  # emitted tokens still inside the window
+        self.late_tokens = 0
+        """Tokens emitted behind the promised frontier (see module docstring)."""
 
     @property
     def spec(self) -> RecognizerSpec:
@@ -114,18 +127,32 @@ class Recognizer(Generic[Role]):
         ]
         guard = window_start + self._edge if window_start > 0 else 0
         emitted: list[Token[Role]] = []
+        earliest_pending: int | None = None  # start of the earliest token not emitted yet
         for t in current:
-            if t.end > resolve_line or t.start < guard:
-                continue
-            if not final and not any(self._same(p, t) for p in self._previous):
+            if t.start < guard:
                 continue
             if any(self._same(e, t) or self._overlaps(e, t) for e in self._emitted):
                 continue
+            confirmed = t.end <= resolve_line and (
+                final
+                or t.end <= resolve_line - self._timeout
+                or any(self._same(p, t) for p in self._previous)
+            )
+            if not confirmed:
+                if earliest_pending is None or t.start < earliest_pending:
+                    earliest_pending = t.start
+                continue
+            if t.start < self._resolved_until:
+                self.late_tokens += 1
             self._emitted.append(t)
             emitted.append(self._token(t, now))
 
         self._previous = current
-        self._resolved_until = max(self._resolved_until, resolve_line)
+        # The promise must survive the jitter a pending token's start can show next decode.
+        frontier = resolve_line if final else resolve_line - self._lag
+        if earliest_pending is not None:
+            frontier = min(frontier, earliest_pending - self._agree)
+        self._resolved_until = max(self._resolved_until, frontier)
         self._emitted = [e for e in self._emitted if e.start >= window_start]
         emitted.sort(key=lambda tok: tok.start.samples)
         return emitted

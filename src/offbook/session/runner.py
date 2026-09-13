@@ -129,7 +129,7 @@ class Session:
         live_stream: _Stream[Live] = _Stream(Live, live_backend, cfg, rate)
         spec = ref_backend.spec
 
-        aligner = Aligner(cfg.alignment, spec.unit)
+        aligner = Aligner(cfg.alignment, spec.unit, reference_end_s=reference.duration_s)
         score = RunningScore(cfg.alignment.timing_fail_weight, reference.duration_s)
 
         tail_s = (
@@ -251,6 +251,7 @@ class Session:
                 max_abs_s=graph.drift.max_abs_s,
                 final_s=graph.drift.final_s,
             ),
+            live_tokens_ignored_after_reference_end=aligner.ignored_after_end,
             session_duration_s=time.monotonic() - wall0,
             error=error,
         )
