@@ -1,0 +1,500 @@
+{
+  "$defs": {
+    "AlignmentConfig": {
+      "properties": {
+        "tolerance_s": {
+          "default": 0.75,
+          "description": "|dt| within which a lexical match is also a timing match",
+          "exclusiveMinimum": 0,
+          "title": "Tolerance S",
+          "type": "number"
+        },
+        "max_lag_s": {
+          "default": 1.5,
+          "description": "Extra lateness a live token may have and still be considered",
+          "minimum": 0,
+          "title": "Max Lag S",
+          "type": "number"
+        },
+        "window_tokens": {
+          "default": 12,
+          "description": "Reference tokens held for edit-distance",
+          "minimum": 2,
+          "title": "Window Tokens",
+          "type": "integer"
+        },
+        "timing_fail_weight": {
+          "default": 0.5,
+          "description": "Weight of a FAIL_TIMING relative to a lexical failure",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Timing Fail Weight",
+          "type": "number"
+        },
+        "phoneme_match_threshold": {
+          "default": 0.34,
+          "description": "Phoneme mode: max normalized edit distance still counted as MATCH",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Phoneme Match Threshold",
+          "type": "number"
+        }
+      },
+      "title": "AlignmentConfig",
+      "type": "object"
+    },
+    "ChunkingConfig": {
+      "description": "Chunked streaming with overlap. Boundaries are defined on transport sample counts,\nnever wall clock, so identical audio always yields identical chunks.\n\nEvery `hop_s`, the last `window_s` of audio is re-decoded. A token is emitted once it\nends before `window_end \u2212 resolve_margin_s`, starts past the window's left-edge guard,\nand two consecutive decodes agree on it (same text, start within `agree_s`). Long\nwindows matter: the recognizers were tuned against one-shot decodes of full vocals,\nand 30 s windows get within a few percent of them; 6 s windows do not.",
+      "properties": {
+        "window_s": {
+          "default": 30.0,
+          "description": "Audio re-decoded on every hop",
+          "exclusiveMinimum": 0,
+          "title": "Window S",
+          "type": "number"
+        },
+        "hop_s": {
+          "default": 2.0,
+          "description": "New audio between decodes",
+          "exclusiveMinimum": 0,
+          "title": "Hop S",
+          "type": "number"
+        },
+        "resolve_margin_s": {
+          "default": 2.0,
+          "description": "Tokens ending within this of the window end stay tentative",
+          "minimum": 0,
+          "title": "Resolve Margin S",
+          "type": "number"
+        },
+        "agree_s": {
+          "default": 0.3,
+          "description": "Two decodes agree on a token if its start moved by at most this",
+          "minimum": 0,
+          "title": "Agree S",
+          "type": "number"
+        },
+        "edge_guard_s": {
+          "default": 1.0,
+          "description": "Tokens starting within this of the window's left edge are ignored",
+          "minimum": 0,
+          "title": "Edge Guard S",
+          "type": "number"
+        }
+      },
+      "title": "ChunkingConfig",
+      "type": "object"
+    },
+    "CountsRecord": {
+      "properties": {
+        "match": {
+          "title": "Match",
+          "type": "integer"
+        },
+        "fail_lexical": {
+          "title": "Fail Lexical",
+          "type": "integer"
+        },
+        "fail_timing": {
+          "title": "Fail Timing",
+          "type": "integer"
+        },
+        "fail_missed": {
+          "title": "Fail Missed",
+          "type": "integer"
+        },
+        "fail_inserted": {
+          "title": "Fail Inserted",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "match",
+        "fail_lexical",
+        "fail_timing",
+        "fail_missed",
+        "fail_inserted"
+      ],
+      "title": "CountsRecord",
+      "type": "object"
+    },
+    "DriftRecord": {
+      "properties": {
+        "duplex": {
+          "description": "Mic and output on one device: drift is zero by design",
+          "title": "Duplex",
+          "type": "boolean"
+        },
+        "input_rate": {
+          "title": "Input Rate",
+          "type": "integer"
+        },
+        "output_rate": {
+          "title": "Output Rate",
+          "type": "integer"
+        },
+        "samples": {
+          "items": {
+            "$ref": "#/$defs/DriftSampleRecord"
+          },
+          "title": "Samples",
+          "type": "array"
+        },
+        "max_abs_s": {
+          "title": "Max Abs S",
+          "type": "number"
+        },
+        "final_s": {
+          "title": "Final S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "duplex",
+        "input_rate",
+        "output_rate",
+        "samples",
+        "max_abs_s",
+        "final_s"
+      ],
+      "title": "DriftRecord",
+      "type": "object"
+    },
+    "DriftSampleRecord": {
+      "properties": {
+        "transport_s": {
+          "title": "Transport S",
+          "type": "number"
+        },
+        "drift_s": {
+          "title": "Drift S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "transport_s",
+        "drift_s"
+      ],
+      "title": "DriftSampleRecord",
+      "type": "object"
+    },
+    "PairRecord": {
+      "properties": {
+        "reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null \u21d2 FAIL_INSERTED"
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null \u21d2 FAIL_MISSED"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "dt_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "live.start \u2212 reference.start; positive = late",
+          "title": "Dt S"
+        },
+        "score_after": {
+          "description": "Aggregate score after this verdict",
+          "title": "Score After",
+          "type": "number"
+        }
+      },
+      "required": [
+        "reference",
+        "live",
+        "verdict",
+        "dt_s",
+        "score_after"
+      ],
+      "title": "PairRecord",
+      "type": "object"
+    },
+    "RecognizerConfig": {
+      "properties": {
+        "impl": {
+          "default": "parakeet",
+          "description": "'parakeet' (word) or 'w2v2-phoneme' (phoneme)",
+          "title": "Impl",
+          "type": "string"
+        },
+        "dtype": {
+          "default": "float32",
+          "description": "MLX dtype for weights",
+          "title": "Dtype",
+          "type": "string"
+        },
+        "share_weights": {
+          "default": false,
+          "description": "Load weights once and share between the two instances",
+          "title": "Share Weights",
+          "type": "boolean"
+        }
+      },
+      "title": "RecognizerConfig",
+      "type": "object"
+    },
+    "RecognizerRecord": {
+      "properties": {
+        "impl": {
+          "title": "Impl",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "model_hash": {
+          "description": "sha256 over the pinned model files",
+          "title": "Model Hash",
+          "type": "string"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        }
+      },
+      "required": [
+        "impl",
+        "unit",
+        "model_id",
+        "revision",
+        "model_hash",
+        "dtype"
+      ],
+      "title": "RecognizerRecord",
+      "type": "object"
+    },
+    "SessionConfig": {
+      "properties": {
+        "chunking": {
+          "$ref": "#/$defs/ChunkingConfig",
+          "default": {
+            "window_s": 30.0,
+            "hop_s": 2.0,
+            "resolve_margin_s": 2.0,
+            "agree_s": 0.3,
+            "edge_guard_s": 1.0
+          }
+        },
+        "alignment": {
+          "$ref": "#/$defs/AlignmentConfig",
+          "default": {
+            "tolerance_s": 0.75,
+            "max_lag_s": 1.5,
+            "window_tokens": 12,
+            "timing_fail_weight": 0.5,
+            "phoneme_match_threshold": 0.34
+          }
+        },
+        "recognizer": {
+          "$ref": "#/$defs/RecognizerConfig",
+          "default": {
+            "impl": "parakeet",
+            "dtype": "float32",
+            "share_weights": false
+          }
+        },
+        "seed": {
+          "default": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "drift_log_interval_s": {
+          "default": 1.0,
+          "title": "Drift Log Interval S",
+          "type": "number"
+        }
+      },
+      "title": "SessionConfig",
+      "type": "object"
+    },
+    "TokenRecord": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "start_s": {
+          "title": "Start S",
+          "type": "number"
+        },
+        "end_s": {
+          "title": "End S",
+          "type": "number"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "resolved_wall_s": {
+          "description": "Wall-clock seconds since session start",
+          "title": "Resolved Wall S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "start_s",
+        "end_s",
+        "confidence",
+        "resolved_wall_s"
+      ],
+      "title": "TokenRecord",
+      "type": "object"
+    },
+    "Verdict": {
+      "enum": [
+        "MATCH",
+        "FAIL_LEXICAL",
+        "FAIL_TIMING",
+        "FAIL_MISSED",
+        "FAIL_INSERTED"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "started_at": {
+      "description": "ISO-8601 UTC",
+      "title": "Started At",
+      "type": "string"
+    },
+    "mode": {
+      "description": "'live' (mic) or 'replay' (recorded performance)",
+      "title": "Mode",
+      "type": "string"
+    },
+    "reference_path": {
+      "title": "Reference Path",
+      "type": "string"
+    },
+    "backing_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Backing Path"
+    },
+    "performance_wav_path": {
+      "title": "Performance Wav Path",
+      "type": "string"
+    },
+    "transport_rate": {
+      "title": "Transport Rate",
+      "type": "integer"
+    },
+    "reference_duration_s": {
+      "title": "Reference Duration S",
+      "type": "number"
+    },
+    "recognizer": {
+      "$ref": "#/$defs/RecognizerRecord"
+    },
+    "config": {
+      "$ref": "#/$defs/SessionConfig"
+    },
+    "pairs": {
+      "items": {
+        "$ref": "#/$defs/PairRecord"
+      },
+      "title": "Pairs",
+      "type": "array"
+    },
+    "counts": {
+      "$ref": "#/$defs/CountsRecord"
+    },
+    "match_rate": {
+      "title": "Match Rate",
+      "type": "number"
+    },
+    "final_score": {
+      "title": "Final Score",
+      "type": "number"
+    },
+    "drift": {
+      "$ref": "#/$defs/DriftRecord"
+    },
+    "session_duration_s": {
+      "title": "Session Duration S",
+      "type": "number"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    }
+  },
+  "required": [
+    "session_id",
+    "started_at",
+    "mode",
+    "reference_path",
+    "backing_path",
+    "performance_wav_path",
+    "transport_rate",
+    "reference_duration_s",
+    "recognizer",
+    "config",
+    "pairs",
+    "counts",
+    "match_rate",
+    "final_score",
+    "drift",
+    "session_duration_s"
+  ],
+  "title": "SessionRecord",
+  "type": "object"
+}

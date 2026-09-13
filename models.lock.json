@@ -1,0 +1,12 @@
+{
+  "parakeet": {
+    "model_id": "mlx-community/parakeet-tdt-0.6b-v2",
+    "revision": "8ae155301e23d820d82aa60d24817c900e69e487",
+    "model_hash": "b005e3e9500ba275f75143717b92404b90835b7aab88b3d7707397b21203f2ab"
+  },
+  "w2v2-phoneme": {
+    "model_id": "facebook/wav2vec2-lv-60-espeak-cv-ft",
+    "revision": "ae45363bf3413b374fecd9dc8bc1df0e24c3b7f4",
+    "model_hash": "66ef658be7e87a2498144a3acee9ee6850eea2e28a45186527cf5ebdfcac846d"
+  }
+}

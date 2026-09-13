@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>off book</title>
+<style>
+  :root {
+    --bg: #101418; --panel: #171c22; --line: #2a323b; --fg: #e6e9ec; --dim: #8b96a1;
+    --accent: #5cc8ff; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --ins: #c084fc;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .04em; }
+  header .sub { color: var(--dim); }
+  main { display: grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+  section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+  label { display: block; color: var(--dim); font-size: 12px; margin: 8px 0 3px; }
+  input[type=text], input[type=number], select {
+    width: 100%; background: #0d1114; color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; font: inherit;
+  }
+  input[type=text] { font-family: var(--mono); font-size: 12px; }
+  .row { display: flex; gap: 6px; align-items: end; }
+  .row > * { flex: 1; }
+  .row > button { flex: 0 0 auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 10px; }
+  button { background: #222a33; color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #05131b; border-color: var(--accent); font-weight: 600; }
+  button.danger { background: #3a1d1d; border-color: #6b2b2b; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; }
+  .seg button.on { background: #2a3947; color: var(--accent); }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--dim); }
+  .pill.loading { color: var(--warn); border-color: var(--warn); }
+  .pill.running { color: var(--ok); border-color: var(--ok); }
+  .pill.error { color: var(--bad); border-color: var(--bad); }
+  .pill.done { color: var(--accent); border-color: var(--accent); }
+  .err { color: var(--bad); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; margin-top: 8px; }
+  .score { display: flex; align-items: baseline; gap: 18px; }
+  .score .n { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .score .m { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+  .bar { height: 6px; background: #0d1114; border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .meta { color: var(--dim); font-family: var(--mono); font-size: 11px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .streams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stream { background: #0d1114; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 90px; max-height: 160px; overflow-y: auto; font-family: var(--mono); font-size: 13px; line-height: 1.7; }
+  .stream b { display: block; font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .08em; margin-bottom: 4px; }
+  .stream span { display: inline-block; margin-right: .5em; }
+  .stream.ref span { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 3px 6px; border-bottom: 1px solid #1e252d; white-space: nowrap; }
+  td.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .v-MATCH { color: var(--ok); } .v-FAIL_LEXICAL { color: var(--bad); } .v-FAIL_TIMING { color: var(--warn); }
+  .v-FAIL_MISSED { color: var(--bad); opacity: .8; } .v-FAIL_INSERTED { color: var(--ins); }
+  .tablewrap { max-height: 380px; overflow-y: auto; }
+  .counts { display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; margin-top: 8px; }
+  .counts span { padding: 2px 8px; border-radius: 4px; background: #0d1114; border: 1px solid var(--line); }
+  details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
+  a { color: var(--accent); }
+  .hint { color: var(--dim); font-size: 12px; margin: 6px 0 0; }
+  .warn { color: var(--warn); }
+  /* file browser */
+  dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; width: min(720px, 92vw); padding: 0; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .fb-head { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+  .fb-head input { flex: 1; }
+  .fb-list { max-height: 60vh; overflow-y: auto; padding: 6px 0; font-family: var(--mono); font-size: 13px; }
+  .fb-list div { padding: 5px 14px; cursor: pointer; display: flex; justify-content: space-between; }
+  .fb-list div:hover { background: #222a33; }
+  .fb-list .d { color: var(--accent); }
+  .fb-list .s { color: var(--dim); font-size: 11px; }
+  .fb-foot { padding: 8px 12px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+  .sessions td { white-space: normal; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OFF BOOK</h1>
+  <span class="sub">dual-stream scoring engine — control panel</span>
+  <span id="status" class="pill" style="margin-left:auto">idle</span>
+</header>
+
+<main>
+<div>
+  <section>
+    <h2>Mode</h2>
+    <div class="seg" id="mode">
+      <button data-mode="live" class="on">Live (mic)</button>
+      <button data-mode="replay">Replay (recorded performance)</button>
+    </div>
+    <p class="hint" id="modehint"><span class="warn">Closed-back headphones only.</span> The reference vocal is never played; the backing track goes to the output device; the mic must hear only the singer.</p>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <label>Reference vocal <span class="warn">(analysed, never played)</span></label>
+    <div class="row"><input type="text" id="reference" placeholder="/path/to/reference_vocal.wav"><button data-browse="reference">Browse</button></div>
+    <div id="f-backing">
+      <label>Backing track → headphones</label>
+      <div class="row"><input type="text" id="backing" placeholder="/path/to/backing.wav (optional)"><button data-browse="backing">Browse</button></div>
+    </div>
+    <div id="f-performance" hidden>
+      <label>Recorded performance (live vocal .wav)</label>
+      <div class="row"><input type="text" id="performance" placeholder="sessions/<id>/performance.wav"><button data-browse="performance">Browse</button></div>
+    </div>
+    <label>Session output directory</label>
+    <div class="row"><input type="text" id="out_dir" value="sessions"><button data-browse="out_dir" data-dirs="1">Browse</button></div>
+  </section>
+
+  <section id="devices-section">
+    <h2>Devices</h2>
+    <label>Mic (input) — the transport clock</label>
+    <select id="input_device"></select>
+    <label>Headphones (output)</label>
+    <select id="output_device"></select>
+    <div class="row" style="margin-top:8px"><span class="hint" id="duplexhint"></span><button id="refresh-devices">Refresh</button></div>
+  </section>
+
+  <section>
+    <h2>Recognizer</h2>
+    <div class="seg" id="impl">
+      <button data-impl="parakeet" class="on">A · Word (Parakeet TDT)</button>
+      <button data-impl="w2v2-phoneme">B · Phoneme (wav2vec2)</button>
+    </div>
+    <div class="grid2">
+      <div><label>Weights dtype</label>
+        <select id="dtype"><option>float32</option><option>bfloat16</option><option>float16</option></select></div>
+      <div><label>Share weights between instances</label>
+        <select id="share_weights"><option value="false">no (two full instances)</option><option value="true">yes</option></select></div>
+    </div>
+    <details style="margin-top:10px" open>
+      <summary>Alignment</summary>
+      <div class="grid2">
+        <div><label>Timing tolerance (s)</label><input type="number" step="0.05" id="tolerance_s"></div>
+        <div><label>Max lag (s)</label><input type="number" step="0.1" id="max_lag_s"></div>
+        <div><label>Window (reference tokens)</label><input type="number" step="1" id="window_tokens"></div>
+        <div><label>Timing-fail weight (0–1)</label><input type="number" step="0.05" min="0" max="1" id="timing_fail_weight"></div>
+        <div id="f-phth"><label>Phoneme match threshold</label><input type="number" step="0.01" min="0" max="1" id="phoneme_match_threshold"></div>
+      </div>
+    </details>
+    <details style="margin-top:10px">
+      <summary>Chunking</summary>
+      <div class="grid3">
+        <div><label>Window (s)</label><input type="number" step="0.5" id="window_s"></div>
+        <div><label>Hop (s)</label><input type="number" step="0.25" id="hop_s"></div>
+        <div><label>Resolve margin (s)</label><input type="number" step="0.25" id="resolve_margin_s"></div>
+        <div><label>Agreement tolerance (s)</label><input type="number" step="0.05" id="agree_s"></div>
+        <div><label>Left-edge guard (s)</label><input type="number" step="0.25" id="edge_guard_s"></div>
+      </div>
+      <p class="hint">Long windows matter: 30 s is within a few percent of decoding the whole file at once; 6 s is not.</p>
+    </details>
+    <div class="row" style="margin-top:10px"><span></span><button id="reset-config">Reset to defaults</button></div>
+  </section>
+
+  <section>
+    <h2>Execution</h2>
+    <div class="controls">
+      <button class="primary" id="start">Start session</button>
+      <button class="danger" id="stop" disabled>Stop</button>
+    </div>
+    <div class="err" id="error"></div>
+  </section>
+</div>
+
+<div>
+  <section>
+    <h2>Score</h2>
+    <div class="score">
+      <div class="n" id="score">0.0</div>
+      <div class="m">
+        <div>match rate <b id="match_rate">—</b></div>
+        <div>transport <b id="transport">0.0</b> s / <b id="duration">—</b> s</div>
+        <div>drift ADC↔DAC <b id="drift">—</b></div>
+      </div>
+    </div>
+    <div class="bar"><i id="progress"></i></div>
+    <div class="meta" id="recog"></div>
+    <div class="counts" id="counts"></div>
+    <div id="result" class="hint"></div>
+  </section>
+
+  <section>
+    <h2>Streams as they resolve</h2>
+    <div class="streams">
+      <div class="stream ref"><b>REFERENCE</b><div id="s-ref"></div></div>
+      <div class="stream live"><b>LIVE</b><div id="s-live"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Verdicts</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>reference</th><th>live</th><th>verdict</th><th class="r">dt</th><th class="r">conf</th><th class="r">score</th></tr></thead>
+        <tbody id="verdicts"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Past sessions</h2>
+    <div class="tablewrap sessions">
+      <table>
+        <thead><tr><th>session</th><th>mode</th><th>recognizer</th><th class="r">score</th><th></th></tr></thead>
+        <tbody id="sessions"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</main>
+
+<dialog id="fb">
+  <div class="fb-head"><button id="fb-up">↑</button><input type="text" id="fb-path"><button id="fb-go">Go</button></div>
+  <div class="fb-list" id="fb-list"></div>
+  <div class="fb-foot"><button id="fb-choose-dir" hidden>Choose this folder</button><button id="fb-close">Close</button></div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
+  return r.json();
+};
+
+// ---- state ------------------------------------------------------------------------------
+let mode = "live", impl = "parakeet", defaults = null, refDuration = null;
+const ALIGN = ["tolerance_s", "max_lag_s", "window_tokens", "timing_fail_weight", "phoneme_match_threshold"];
+const CHUNK = ["window_s", "hop_s", "resolve_margin_s", "agree_s", "edge_guard_s"];
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll("#mode button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+  $("f-backing").hidden = m !== "live";
+  $("f-performance").hidden = m !== "replay";
+  $("devices-section").hidden = m !== "live";
+  $("modehint").innerHTML = m === "live"
+    ? '<span class="warn">Closed-back headphones only.</span> The reference vocal is never played; the backing track goes to the output device; the mic must hear only the singer.'
+    : 'Replays a recorded performance through the same pipeline. No audio devices are opened. Deterministic.';
+}
+function setImpl(i, resetKnobs) {
+  impl = i;
+  document.querySelectorAll("#impl button").forEach(b => b.classList.toggle("on", b.dataset.impl === i));
+  $("f-phth").hidden = i !== "w2v2-phoneme";
+  if (resetKnobs && defaults) applyDefaults();
+}
+function applyDefaults() {
+  const d = defaults[impl === "parakeet" ? "word" : "phoneme"];
+  for (const k of ALIGN) $(k).value = d.alignment[k];
+  for (const k of CHUNK) $(k).value = d.chunking[k];
+  $("dtype").value = d.recognizer.dtype;
+  $("share_weights").value = String(d.recognizer.share_weights);
+}
+function buildConfig() {
+  const alignment = {}, chunking = {};
+  for (const k of ALIGN) alignment[k] = Number($(k).value);
+  for (const k of CHUNK) chunking[k] = Number($(k).value);
+  return { alignment, chunking, recognizer: { impl, dtype: $("dtype").value, share_weights: $("share_weights").value === "true" } };
+}
+
+document.querySelectorAll("#mode button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+document.querySelectorAll("#impl button").forEach(b => b.onclick = () => setImpl(b.dataset.impl, true));
+$("reset-config").onclick = applyDefaults;
+
+// ---- devices ----------------------------------------------------------------------------
+async function loadDevices() {
+  try {
+    const d = await api("/api/devices");
+    const fill = (sel, key, def) => {
+      sel.innerHTML = "";
+      for (const dev of d.devices) {
+        if (dev[key] <= 0) continue;
+        const o = document.createElement("option");
+        o.value = dev.index; o.textContent = `${dev.index}: ${dev.name} (${dev[key]} ch, ${dev.rate} Hz)`;
+        if (dev.index === def) o.selected = true;
+        sel.appendChild(o);
+      }
+    };
+    fill($("input_device"), "inputs", d.default_input);
+    fill($("output_device"), "outputs", d.default_output);
+    updateDuplexHint();
+  } catch (e) { $("duplexhint").textContent = "devices: " + e.message; }
+}
+function updateDuplexHint() {
+  const same = $("input_device").value === $("output_device").value;
+  $("duplexhint").textContent = same ? "same device: duplex stream, drift zero by design" : "separate devices: two streams, drift measured";
+}
+$("input_device").onchange = $("output_device").onchange = updateDuplexHint;
+$("refresh-devices").onclick = loadDevices;
+
+// ---- file browser -----------------------------------------------------------------------
+let fbTarget = null, fbDirsOnly = false;
+async function fbLoad(path) {
+  try {
+    const d = await api("/api/browse?path=" + encodeURIComponent(path));
+    $("fb-path").value = d.path; $("fb-path").dataset.parent = d.parent;
+    const list = $("fb-list"); list.innerHTML = "";
+    for (const name of d.dirs) {
+      const row = document.createElement("div"); row.innerHTML = `<span class="d">${name}/</span>`;
+      row.onclick = () => fbLoad(d.path + "/" + name); list.appendChild(row);
+    }
+    if (!fbDirsOnly) for (const f of d.files) {
+      const row = document.createElement("div");
+      row.innerHTML = `<span>${f.name}</span><span class="s">${(f.size / 1e6).toFixed(1)} MB</span>`;
+      row.onclick = () => { $(fbTarget).value = d.path + "/" + f.name; $("fb").close(); };
+      list.appendChild(row);
+    }
+  } catch (e) { $("fb-list").innerHTML = `<div class="err">${e.message}</div>`; }
+}
+document.querySelectorAll("[data-browse]").forEach(b => b.onclick = () => {
+  fbTarget = b.dataset.browse; fbDirsOnly = !!b.dataset.dirs;
+  $("fb-choose-dir").hidden = !fbDirsOnly;
+  const cur = $(fbTarget).value;
+  fbLoad(cur ? cur.replace(/\/[^/]*$/, "") || cur : (localStorage.getItem("offbook.lastdir") || "~"));
+  $("fb").showModal();
+});
+$("fb-up").onclick = () => fbLoad($("fb-path").dataset.parent);
+$("fb-go").onclick = () => fbLoad($("fb-path").value);
+$("fb-path").onkeydown = (e) => { if (e.key === "Enter") fbLoad($("fb-path").value); };
+$("fb-choose-dir").onclick = () => { $(fbTarget).value = $("fb-path").value; $("fb").close(); };
+$("fb-close").onclick = () => $("fb").close();
+$("fb").addEventListener("close", () => localStorage.setItem("offbook.lastdir", $("fb-path").value));
+
+// ---- execution --------------------------------------------------------------------------
+function setStatus(s, err) {
+  const p = $("status"); p.textContent = s; p.className = "pill " + s;
+  const busy = s === "loading" || s === "running";
+  $("start").disabled = busy; $("stop").disabled = !busy;
+  $("error").textContent = err || "";
+}
+$("start").onclick = async () => {
+  resetReadout();
+  const body = {
+    mode, reference: $("reference").value.trim(),
+    backing: mode === "live" ? ($("backing").value.trim() || null) : null,
+    performance: mode === "replay" ? $("performance").value.trim() : null,
+    input_device: mode === "live" ? Number($("input_device").value) : null,
+    output_device: mode === "live" ? Number($("output_device").value) : null,
+    out_dir: $("out_dir").value.trim() || "sessions",
+    config: buildConfig(),
+  };
+  localStorage.setItem("offbook.form", JSON.stringify({ mode, impl, reference: body.reference, backing: $("backing").value, performance: $("performance").value, out_dir: body.out_dir }));
+  try { await api("/api/session/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); setStatus("loading"); subscribe(); }
+  catch (e) { setStatus("error", e.message); }
+};
+$("stop").onclick = () => api("/api/session/stop", { method: "POST" }).catch(e => setStatus("error", e.message));
+
+// ---- readout ----------------------------------------------------------------------------
+let es = null, verdictCount = 0;
+function resetReadout() {
+  $("score").textContent = "0.0"; $("match_rate").textContent = "—"; $("transport").textContent = "0.0";
+  $("duration").textContent = "—"; $("drift").textContent = "—"; $("progress").style.width = "0";
+  $("recog").textContent = ""; $("counts").innerHTML = ""; $("result").innerHTML = "";
+  $("s-ref").innerHTML = ""; $("s-live").innerHTML = ""; $("verdicts").innerHTML = ""; verdictCount = 0; refDuration = null;
+}
+function subscribe() {
+  if (es) es.close();
+  es = new EventSource("/api/events");
+  es.onmessage = (m) => handle(JSON.parse(m.data));
+}
+function setTransport(t) {
+  $("transport").textContent = t.toFixed(1);
+  if (refDuration) $("progress").style.width = Math.min(100, 100 * t / refDuration) + "%";
+}
+function appendTokens(el, toks) {
+  for (const t of toks) { const s = document.createElement("span"); s.textContent = t.text; s.title = `${t.start_s}s · conf ${t.confidence}`; el.appendChild(s); }
+  el.parentElement.scrollTop = el.parentElement.scrollHeight;
+}
+function handle(ev) {
+  switch (ev.kind) {
+    case "status":
+      setStatus(ev.status, ev.error);
+      if (ev.status === "done" || ev.status === "error") { es && es.close(); es = null; loadSessions(); showResult(); }
+      break;
+    case "header":
+      refDuration = ev.reference_duration_s; $("duration").textContent = refDuration.toFixed(1);
+      $("recog").innerHTML = `<span>${ev.recognizer.impl} (${ev.recognizer.unit})</span><span>${ev.recognizer.model_id}@${ev.recognizer.revision.slice(0, 12)}</span><span>hash ${ev.recognizer.model_hash.slice(0, 16)}</span><span>${ev.recognizer.dtype}</span><span>${ev.mode} · ${ev.duplex ? "duplex" : "split in/out"} · ${ev.transport_rate} Hz</span>`;
+      break;
+    case "tick":
+      setTransport(ev.transport_s);
+      break;
+    case "resolved":
+      setTransport(ev.transport_s);
+      appendTokens($("s-ref"), ev.reference); appendTokens($("s-live"), ev.live);
+      break;
+    case "verdict": {
+      $("score").textContent = ev.score.toFixed(1);
+      const tr = document.createElement("tr");
+      const conf = ev.live ? ev.live.confidence : (ev.reference ? ev.reference.confidence : "");
+      tr.innerHTML = `<td>${ev.reference ? ev.reference.text : "—"}</td><td>${ev.live ? ev.live.text : "—"}</td><td class="v-${ev.verdict}">${ev.verdict}</td><td class="r">${ev.dt_s == null ? "" : (ev.dt_s >= 0 ? "+" : "") + ev.dt_s.toFixed(2)}</td><td class="r">${conf}</td><td class="r">${ev.score.toFixed(1)}</td>`;
+      const tb = $("verdicts"); tb.appendChild(tr); if (++verdictCount > 400) tb.removeChild(tb.firstChild);
+      tb.parentElement.parentElement.scrollTop = tb.parentElement.parentElement.scrollHeight;
+      break;
+    }
+    case "drift":
+      $("drift").textContent = (ev.drift_ms >= 0 ? "+" : "") + ev.drift_ms.toFixed(3) + " ms";
+      break;
+    case "final":
+      $("score").textContent = ev.score.toFixed(1); $("match_rate").textContent = ev.match_rate.toFixed(3);
+      $("progress").style.width = "100%";
+      $("counts").innerHTML = Object.entries(ev.counts).map(([k, n]) => `<span class="v-${k}">${k} ${n}</span>`).join("");
+      break;
+  }
+}
+async function showResult() {
+  const s = await api("/api/session/status");
+  if (s.result) {
+    const r = s.result;
+    $("result").innerHTML = `record <a href="/api/sessions/${r.session_id}/record?out_dir=${encodeURIComponent($("out_dir").value)}">${r.record_path}</a>` +
+      (r.performance_wav_path ? ` · performance ${r.performance_wav_path}` : "") + ` · max |drift| ${r.drift_max_abs_ms.toFixed(3)} ms` + (r.error ? ` · <span class="warn">${r.error}</span>` : "");
+  }
+}
+async function loadSessions() {
+  try {
+    const list = await api("/api/sessions?out_dir=" + encodeURIComponent($("out_dir").value || "sessions"));
+    $("sessions").innerHTML = list.map(s => `<tr><td>${s.session_id}<br><span class="s" style="color:var(--dim)">${s.reference_path}</span></td><td>${s.mode}</td><td>${s.recognizer}</td><td class="r">${s.final_score == null ? "" : s.final_score.toFixed(1)}${s.error ? " (" + s.error + ")" : ""}</td><td><a href="/api/sessions/${s.session_id}/record?out_dir=${encodeURIComponent($("out_dir").value)}">json</a>${s.mode === "live" ? ` · <a href="#" data-replay="${s.performance_wav_path}" data-ref="${s.reference_path}">replay</a>` : ""}</td></tr>`).join("");
+    document.querySelectorAll("[data-replay]").forEach(a => a.onclick = (e) => { e.preventDefault(); setMode("replay"); $("performance").value = a.dataset.replay; $("reference").value = a.dataset.ref; window.scrollTo(0, 0); });
+  } catch (e) { $("sessions").innerHTML = `<tr><td colspan="5" class="err">${e.message}</td></tr>`; }
+}
+
+// ---- boot -------------------------------------------------------------------------------
+(async () => {
+  defaults = await api("/api/config/defaults");
+  const saved = JSON.parse(localStorage.getItem("offbook.form") || "{}");
+  setMode(saved.mode || "live"); setImpl(saved.impl || "parakeet", false); applyDefaults();
+  for (const k of ["reference", "backing", "performance", "out_dir"]) if (saved[k]) $(k).value = saved[k];
+  await loadDevices(); await loadSessions();
+  const s = await api("/api/session/status");
+  setStatus(s.status, s.error);
+  if (s.status === "loading" || s.status === "running") subscribe();
+})();
+</script>
+</body>
+</html>
