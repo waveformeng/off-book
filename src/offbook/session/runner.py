@@ -130,7 +130,12 @@ class Session:
         spec = ref_backend.spec
 
         aligner = Aligner(cfg.alignment, spec.unit, reference_end_s=reference.duration_s)
-        score = RunningScore(cfg.alignment.timing_fail_weight, reference.duration_s)
+        score = RunningScore(
+            cfg.alignment.timing_fail_weight,
+            reference.duration_s,
+            graded_timing=cfg.alignment.graded_timing,
+            tolerance_s=cfg.alignment.tolerance_s,
+        )
 
         tail_s = (
             cfg.alignment.tolerance_s

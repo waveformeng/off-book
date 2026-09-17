@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from offbook.asr.base import Token, Unit
 from offbook.clock import TransportTime
+from offbook.compare.sound import metaphone
 from offbook.compare.verdict import TokenPair, Verdict
 from offbook.config import AlignmentConfig
 from offbook.roles import Live, Reference
@@ -25,6 +26,14 @@ _INF = float("inf")
 
 def word_distance(a: str, b: str) -> float:
     return 0.0 if a == b else 1.0
+
+
+def sound_distance(a: str, b: str) -> float:
+    """Words that are spelled the same or sound the same (see offbook.compare.sound)."""
+    if a == b:
+        return 0.0
+    ka, kb = metaphone(a), metaphone(b)
+    return 0.0 if ka and ka == kb else 1.0
 
 
 def phoneme_distance(a: str, b: str) -> float:
@@ -48,9 +57,13 @@ class Aligner:
         self._reference_end_s = reference_end_s
         self._last_ref_start_s = -_INF
         self.ignored_after_end = 0
-        self._lex: Callable[[str, str], float] = (
-            word_distance if unit == "word" else phoneme_distance
-        )
+        self._lex: Callable[[str, str], float]
+        if unit == "phoneme":
+            self._lex = phoneme_distance
+        elif cfg.word_match == "sound":
+            self._lex = sound_distance
+        else:
+            self._lex = word_distance
         self._lex_threshold = 0.0 if unit == "word" else cfg.phoneme_match_threshold
         self._ref: list[Token[Reference]] = []
         self._live: list[Token[Live]] = []
@@ -92,7 +105,8 @@ class Aligner:
         return self._live_resolved >= r.start.seconds + self.cfg.tolerance_s + self.cfg.max_lag_s
 
     def _live_decidable(self, live: Token[Live]) -> bool:
-        return self._ref_resolved >= live.start.seconds + self.cfg.tolerance_s
+        # A reference token up to tolerance + max_lead later could still pair with it.
+        return self._ref_resolved >= live.start.seconds + self.cfg.tolerance_s + self.cfg.max_lead_s
 
     def _past_reference(self, live: Token[Live]) -> bool:
         """No reference token seen so far could pair with this live token."""
@@ -122,7 +136,9 @@ class Aligner:
 
     def _pairable(self, r: Token[Reference], live: Token[Live]) -> bool:
         dt = live.start.seconds - r.start.seconds
-        return -self.cfg.tolerance_s <= dt <= self.cfg.tolerance_s + self.cfg.max_lag_s
+        early = self.cfg.tolerance_s + self.cfg.max_lead_s
+        late = self.cfg.tolerance_s + self.cfg.max_lag_s
+        return -early <= dt <= late
 
     # --- alignment -----------------------------------------------------------------
 
@@ -141,9 +157,10 @@ class Aligner:
         beyond = self._ref[self.cfg.window_tokens :]
         # A live token that could still pair with a reference token past the window edge
         # is not inserted yet; it waits for the window to reach that token.
-        insert_limit = beyond[0].start.seconds - self.cfg.tolerance_s if beyond else _INF
+        early = self.cfg.tolerance_s + self.cfg.max_lead_s
+        insert_limit = beyond[0].start.seconds - early if beyond else _INF
         if refs:
-            lo = refs[0].start.seconds - self.cfg.tolerance_s
+            lo = refs[0].start.seconds - early
             hi = refs[-1].start.seconds + self.cfg.tolerance_s + self.cfg.max_lag_s
             lives = [t for t in self._live if lo <= t.start.seconds <= hi]
         else:
@@ -203,7 +220,7 @@ class Aligner:
         # a perfect-but-late pair must cost less than a wrong-but-on-time one. The last term
         # only breaks ties: among equally good pairings prefer the closer one in time, so a
         # repeated token ("the … the", "n … n") pairs with its own occurrence.
-        closeness = 0.1 * dt / (self.cfg.tolerance_s + self.cfg.max_lag_s)
+        closeness = 0.1 * dt / (self.cfg.tolerance_s + max(self.cfg.max_lag_s, self.cfg.max_lead_s))
         return lex * 1.5 + timing * 0.4 + closeness
 
     def _dp(

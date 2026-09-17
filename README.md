@@ -183,6 +183,9 @@ All exposed on `run`/`replay`; defaults in `offbook/config.py`.
 |---|---|---|
 | `--tolerance` | 0.75 s (phoneme: 0.4) | \|dt\| within which a lexical match is also a timing match |
 | `--max-lag` | 1.5 s | extra lateness a live token may have and still be paired |
+| `max_lead_s` (config/web) | 1.5 s | extra earliness a live token may have and still be paired — a singer who rushes gets FAIL_TIMING, not a phantom insertion plus a missed word |
+| `word_match` (config/web) | `sound` | word mode: `sound` also accepts homophones via a Metaphone key (`for`/`four`, `there`/`their`); `exact` compares spellings |
+| `graded_timing` (config/web) | off | inside the tolerance a MATCH earns `1 − timing_weight·|dt|/tolerance` instead of a flat 1 |
 | `--window-tokens` | 12 (phoneme: 48) | reference tokens held in the edit-distance window |
 | `--timing-weight` | 0.5 | weight of a `FAIL_TIMING` relative to a lexical failure (0–1) |
 | `--window-s` / `--hop-s` / `--margin-s` | 30 / 2 / 3 s | recognizer window, hop, and how much of the window's tail stays tentative |
@@ -252,8 +255,8 @@ IPA characters for phonemes) and a timing penalty; unpairable pairs (outside
 
 | verdict | meaning |
 |---|---|
-| `MATCH` | same token, \|dt\| ≤ tolerance |
-| `FAIL_TIMING` | same token, tolerance < \|dt\| ≤ tolerance + max_lag; worth `1 − timing_weight` |
+| `MATCH` | same token (word mode: same spelling or same sound), \|dt\| ≤ tolerance |
+| `FAIL_TIMING` | same token, late by up to tolerance + max_lag or early by up to tolerance + max_lead; worth `1 − timing_weight` |
 | `FAIL_LEXICAL` | paired in time, different token |
 | `FAIL_MISSED` | reference token with no live counterpart |
 | `FAIL_INSERTED` | live token with no reference counterpart |
@@ -276,6 +279,20 @@ Two policies that keep the score honest:
   `score_past_reference_end` turns the old behaviour back on.
 - **Breath tokens are not words.** The word recognizer emits "uh"/"hmm"-type tokens on
   sung intakes; both streams drop them in normalization.
+- **Homophones are the same word.** The word recognizer spells a sound however its
+  language model leans that moment — `for` on the reference, `four` on the singer. In
+  word mode two words match if their spellings or their Metaphone sound keys agree
+  (`offbook/compare/sound.py`; pure rules, no dictionary). Applied to both streams alike,
+  so it cannot favour either. `word_match: exact` turns it off.
+
+What the score does *not* do by default: reward timing inside the tolerance. Two singers
+who both land every word within 0.75 s score the same even if one is dead on and the
+other consistently half a second late. `graded_timing` changes that — inside the
+tolerance a match earns `1 − timing_weight·|dt|/tolerance`, continuous with FAIL_TIMING
+at the boundary — and it is the knob to turn if timing precision should count. On two
+real takes of the same 45 s song by two singers, one on the beat and one drifting
+0.2–0.6 s late then rushing the last phrase: flat scoring 84.7 vs 70.0, graded 79.9 vs
+62.0.
 
 ## Tuning transcription
 

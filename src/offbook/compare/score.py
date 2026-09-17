@@ -1,7 +1,8 @@
 """Running aggregate score.
 
     match_rate = Σ points / Σ verdicts, where MATCH = 1, FAIL_TIMING = 1 − timing_fail_weight,
-                 every other FAIL = 0
+                 every other FAIL = 0. With graded timing a MATCH earns
+                 1 − timing_fail_weight · |dt| / tolerance instead of a flat 1.
     score      = 100 · match_rate · min(1, transport_position / reference_duration)
 
 It climbs from zero through the song and lands at 100 · match_rate.
@@ -20,6 +21,8 @@ from offbook.compare.verdict import TokenPair, Verdict
 class RunningScore:
     timing_fail_weight: float
     reference_duration_s: float
+    graded_timing: bool = False
+    tolerance_s: float = 1.0
     counts: dict[Verdict, int] = field(default_factory=lambda: {v: 0 for v in Verdict})
     points: float = 0.0
     verdicts: int = 0
@@ -28,7 +31,11 @@ class RunningScore:
         self.counts[pair.verdict] += 1
         self.verdicts += 1
         if pair.verdict is Verdict.MATCH:
-            self.points += 1.0
+            if self.graded_timing and pair.dt_s is not None:
+                fraction = min(abs(pair.dt_s) / self.tolerance_s, 1.0)
+                self.points += 1.0 - self.timing_fail_weight * fraction
+            else:
+                self.points += 1.0
         elif pair.verdict is Verdict.FAIL_TIMING:
             self.points += 1.0 - self.timing_fail_weight
 

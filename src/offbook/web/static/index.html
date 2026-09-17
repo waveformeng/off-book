@@ -141,10 +141,15 @@
       <summary>Alignment</summary>
       <div class="grid2">
         <div><label>Timing tolerance (s)</label><input type="number" step="0.05" id="tolerance_s"></div>
-        <div><label>Max lag (s)</label><input type="number" step="0.1" id="max_lag_s"></div>
+        <div><label>Max lag — late (s)</label><input type="number" step="0.1" id="max_lag_s"></div>
+        <div><label>Max lead — early (s)</label><input type="number" step="0.1" id="max_lead_s"></div>
         <div><label>Window (reference tokens)</label><input type="number" step="1" id="window_tokens"></div>
         <div><label>Timing-fail weight (0–1)</label><input type="number" step="0.05" min="0" max="1" id="timing_fail_weight"></div>
         <div id="f-phth"><label>Phoneme match threshold</label><input type="number" step="0.01" min="0" max="1" id="phoneme_match_threshold"></div>
+        <div id="f-wordmatch"><label>Word comparison</label>
+          <select id="word_match"><option value="sound">spelling or same sound (homophones match)</option><option value="exact">exact spelling</option></select></div>
+        <div><label>Timing credit inside tolerance</label>
+          <select id="graded_timing"><option value="false">flat: any |dt| ≤ tolerance is a full match</option><option value="true">graded: 1 − weight·|dt|/tolerance</option></select></div>
         <div><label>After the reference ends</label>
           <select id="score_past_reference_end"><option value="false">ignore what is sung</option><option value="true">count it as inserted</option></select></div>
       </div>
@@ -238,7 +243,7 @@ const api = async (path, opts) => {
 
 // ---- state ------------------------------------------------------------------------------
 let mode = "live", impl = "parakeet", defaults = null, refDuration = null;
-const ALIGN = ["tolerance_s", "max_lag_s", "window_tokens", "timing_fail_weight", "phoneme_match_threshold"];
+const ALIGN = ["tolerance_s", "max_lag_s", "max_lead_s", "window_tokens", "timing_fail_weight", "phoneme_match_threshold"];
 const CHUNK = ["window_s", "hop_s", "resolve_margin_s", "agree_s", "edge_guard_s", "confirm_timeout_s", "frontier_lag_s"];
 
 function setMode(m) {
@@ -255,12 +260,15 @@ function setImpl(i, resetKnobs) {
   impl = i;
   document.querySelectorAll("#impl button").forEach(b => b.classList.toggle("on", b.dataset.impl === i));
   $("f-phth").hidden = i !== "w2v2-phoneme";
+  $("f-wordmatch").hidden = i === "w2v2-phoneme";
   if (resetKnobs && defaults) applyDefaults();
 }
 function applyDefaults() {
   const d = defaults[impl === "parakeet" ? "word" : "phoneme"];
   for (const k of ALIGN) $(k).value = d.alignment[k];
   $("score_past_reference_end").value = String(d.alignment.score_past_reference_end);
+  $("word_match").value = d.alignment.word_match;
+  $("graded_timing").value = String(d.alignment.graded_timing);
   for (const k of CHUNK) $(k).value = d.chunking[k];
   $("dtype").value = d.recognizer.dtype;
   $("share_weights").value = String(d.recognizer.share_weights);
@@ -269,6 +277,8 @@ function buildConfig() {
   const alignment = {}, chunking = {};
   for (const k of ALIGN) alignment[k] = Number($(k).value);
   alignment.score_past_reference_end = $("score_past_reference_end").value === "true";
+  alignment.word_match = $("word_match").value;
+  alignment.graded_timing = $("graded_timing").value === "true";
   for (const k of CHUNK) chunking[k] = Number($(k).value);
   return { alignment, chunking, recognizer: { impl, dtype: $("dtype").value, share_weights: $("share_weights").value === "true" } };
 }

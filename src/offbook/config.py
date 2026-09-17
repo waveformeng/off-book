@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -52,11 +54,24 @@ class AlignmentConfig(BaseModel, frozen=True):
         ge=0,
         description="Extra lateness a live token may have and still be considered",
     )
+    max_lead_s: float = Field(
+        default=1.5, ge=0, description="Extra earliness a live token may have and still pair"
+    )
     window_tokens: int = Field(
         default=12, ge=2, description="Reference tokens held for edit-distance"
     )
     timing_fail_weight: float = Field(
         default=0.5, ge=0, le=1, description="Weight of a FAIL_TIMING relative to a lexical failure"
+    )
+    word_match: Literal["exact", "sound"] = Field(
+        default="sound",
+        description="Word mode: 'exact' compares spellings; 'sound' also accepts homophones "
+        "(Metaphone key), so a recognizer spelling one sound two ways is not a failure",
+    )
+    graded_timing: bool = Field(
+        default=False,
+        description="Inside the tolerance a MATCH earns 1 − timing_fail_weight·|dt|/tolerance "
+        "instead of a flat 1 (continuous with FAIL_TIMING at the boundary)",
     )
     score_past_reference_end: bool = Field(
         default=False,

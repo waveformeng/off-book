@@ -16,6 +16,13 @@
           "title": "Max Lag S",
           "type": "number"
         },
+        "max_lead_s": {
+          "default": 1.5,
+          "description": "Extra earliness a live token may have and still pair",
+          "minimum": 0,
+          "title": "Max Lead S",
+          "type": "number"
+        },
         "window_tokens": {
           "default": 12,
           "description": "Reference tokens held for edit-distance",
@@ -30,6 +37,22 @@
           "minimum": 0,
           "title": "Timing Fail Weight",
           "type": "number"
+        },
+        "word_match": {
+          "default": "sound",
+          "description": "Word mode: 'exact' compares spellings; 'sound' also accepts homophones (Metaphone key), so a recognizer spelling one sound two ways is not a failure",
+          "enum": [
+            "exact",
+            "sound"
+          ],
+          "title": "Word Match",
+          "type": "string"
+        },
+        "graded_timing": {
+          "default": false,
+          "description": "Inside the tolerance a MATCH earns 1 \u2212 timing_fail_weight\u00b7|dt|/tolerance instead of a flat 1 (continuous with FAIL_TIMING at the boundary)",
+          "title": "Graded Timing",
+          "type": "boolean"
         },
         "score_past_reference_end": {
           "default": false,
@@ -335,8 +358,11 @@
           "default": {
             "tolerance_s": 0.75,
             "max_lag_s": 1.5,
+            "max_lead_s": 1.5,
             "window_tokens": 12,
             "timing_fail_weight": 0.5,
+            "word_match": "sound",
+            "graded_timing": false,
             "score_past_reference_end": false,
             "phoneme_match_threshold": 0.34
           }
