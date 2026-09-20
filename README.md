@@ -1,5 +1,8 @@
 # Off Book — dual-stream scoring engine
 
+[![ci](https://github.com/waveformeng/off-book/actions/workflows/ci.yml/badge.svg)](https://github.com/waveformeng/off-book/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Waveform Karaoke's *Off Book* mode: a singer performs from memory, no lyrics on screen.
 This is the engine underneath. It plays nothing but the backing track, transcribes the
 publisher's **reference vocal** and the singer's **live vocal** through the *same*
@@ -18,8 +21,9 @@ Vocabulary, used exactly:
 
 1. **No lyric text.** Nothing in this repo ingests, stores, derives or outputs written
    lyrics. Ground truth is the reference *audio*, transcribed at runtime by the same
-   recognizer that transcribes the singer. Session records contain the runtime
-   transcripts of both streams; `sessions/` is gitignored.
+   recognizer that transcribes the singer, and the tokens are consumed in memory. Session
+   records hold timing, confidence, verdicts and scores — not the words — unless
+   `record_transcripts` is switched on for tuning work. `sessions/` is gitignored.
 2. **The reference vocal never reaches an output device.** It is decoded to an in-memory
    `ReferencePCM` that has no array interface and no play path. The only object that can
    feed an output stream is `_BackingPlayer`, which accepts only `BackingPCM`. The graph
@@ -36,6 +40,8 @@ Vocabulary, used exactly:
    `tests/test_replay_models.py` replays the same audio twice and asserts identical tokens,
    timestamps, confidences and score.
 5. **Audio files are inputs, never committed.** See `.gitignore`.
+
+[DESIGN.md](DESIGN.md) states each of these with the code and the test that enforces it.
 
 ## Setup
 
@@ -102,8 +108,9 @@ so you can watch either place.
    says whether that pairing is one CoreAudio device (duplex stream, drift zero by design)
    or two (split streams, drift measured and logged). Put on closed-back headphones.
 4. **Recognizer** — *A · Word* (Parakeet) or *B · Phoneme* (wav2vec2). Switching loads
-   that recognizer's defaults; every alignment and chunking knob from the table below is
-   editable, **Reset to defaults** puts them back.
+   that recognizer's defaults; every alignment and chunking knob (all of them in
+   [docs/how-it-works.md](docs/how-it-works.md#config-knobs)) is editable, **Reset to
+   defaults** puts them back.
 5. **Start session**. The status pill goes `loading` (models coming resident, ~5 s) →
    `running` → `done`. **Stop** ends a session early; the record is still written with
    `"error": "stopped"`.
@@ -136,7 +143,7 @@ the control panel on the laptop. It shows exactly four things:
 - **The singer's words** — the LIVE stream's runtime transcript, confirmed words only.
   Nothing appears until it has actually been sung and resolved; the recognizer's tentative
   guesses are not shown, and the reference transcript is never sent to this page. Words
-  land ≈ 5 s after they are sung (see *Tuning transcription*); the waveform is live.
+  land ≈ 5 s after they are sung (see [docs/tuning.md](docs/tuning.md)); the waveform is live.
 - **The score, as colour** — the background sweeps red → blue with the running *match
   rate* (the percentage), not the progress-scaled score, so it reflects how the singer is
   doing now rather than how far into the song they are. Neutral until the first verdict.
@@ -202,215 +209,20 @@ recognizer  parakeet (word) mlx-community/parakeet-tdt-0.6b-v2@8ae155301e23 hash
 `ref ▸ … live ▸ …` lines show each stream's tokens as they resolve; verdict rows follow
 once both sides are decidable. `dt` is `live.start − reference.start` (positive = late).
 
-### Config knobs
+Every alignment and chunking knob is a flag on `run`/`replay`; the table is in
+[docs/how-it-works.md](docs/how-it-works.md#config-knobs). `--record-transcripts` writes
+token text into the session record, which is off by default (see
+[docs/session-record.md](docs/session-record.md)).
 
-All exposed on `run`/`replay`; defaults in `offbook/config.py`.
+## Documentation
 
-| flag | default | meaning |
-|---|---|---|
-| `--tolerance` | 0.75 s (phoneme: 0.4) | \|dt\| within which a lexical match is also a timing match |
-| `--max-lag` | 1.5 s | extra lateness a live token may have and still be paired |
-| `max_lead_s` (config/web) | 1.5 s | extra earliness a live token may have and still be paired — a singer who rushes gets FAIL_TIMING, not a phantom insertion plus a missed word |
-| `word_match` (config/web) | `sound` | word mode: `sound` also accepts homophones via a Metaphone key (`for`/`four`, `there`/`their`); `exact` compares spellings |
-| `graded_timing` (config/web) | off | inside the tolerance a MATCH earns `1 − timing_weight·|dt|/tolerance` instead of a flat 1 |
-| `--window-tokens` | 12 (phoneme: 48) | reference tokens held in the edit-distance window |
-| `--timing-weight` | 0.5 | weight of a `FAIL_TIMING` relative to a lexical failure (0–1) |
-| `--window-s` / `--hop-s` / `--margin-s` | 30 / 1 / 2 s | recognizer window, hop, and how much of the window's tail stays tentative |
-| `--agree-s` | 0.3 s | two consecutive decodes must agree on a token (same text, start within this) before it is emitted |
-| `--edge-guard-s` | 1.0 s | tokens starting this close to a window's left edge are ignored (cut-off phrases decode badly) |
-| `confirm_timeout_s` (config/web) | 2 s | a token unconfirmed this long past the resolve line is emitted anyway |
-| `frontier_lag_s` (config/web) | 2 s | how far the stream's resolved frontier trails the resolve line, so late-surfacing tokens still land ahead of it |
-| `score_past_reference_end` (config/web) | off | count what is sung after the reference vocal's last word as inserted; off = ignore it |
-| `--dtype` | float32 | MLX weight dtype (`bfloat16` halves memory) |
-| `--share-weights` | off | one weight set shared by the two recognizer instances |
-
-## How it works
-
-### Audio graph
-
-```
- reference.wav ─► decode ─► ReferencePCM ─► ReferencePacer ─► Frames[Reference] ─► Recognizer[Reference] ─┐
-                                               ▲ advanced by exactly N frames                            ├─► Aligner ─► Score
- mic ──────────► input callback (N frames) ────┴─► Frames[Live] ────────────────► Recognizer[Live] ──────┘
-                        │                                        (transport clock = mic frame counter)
-                        └─► performance.wav
- backing.wav ──► decode ─► BackingPCM ─► output device (headphones) ─► DriftMonitor (DAC clock vs transport)
-```
-
-The mic input callback is the transport clock. On every block of N frames it advances the
-reference pacer by exactly N frames, so the two analysis streams are sample-aligned by
-construction (a non-zero residual raises `PacerLockstepError`). The backing track runs on
-the output device's clock; `DriftMonitor` uses PortAudio's ADC/DAC timestamps to measure
-where the backing was, in its own clock, at the instant each mic block was captured, and
-logs the difference every second. When mic and headphones are one device the graph opens
-a single duplex stream and drift is zero by design.
-
-Both streams then pass through identical soxr resamplers to 16 kHz and identical chunkers.
-
-### Recognizers
-
-Pluggable `Backend` (window of PCM → tokens with times and confidence). Two ship:
-
-| | A. word | B. phoneme |
-|---|---|---|
-| model | `mlx-community/parakeet-tdt-0.6b-v2` via parakeet-mlx, greedy TDT | `facebook/wav2vec2-lv-60-espeak-cv-ft`, greedy CTC, MLX port in `offbook/asr/mlx_wav2vec2` |
-| token | normalized word, timestamps from TDT, confidence = mean piece confidence | IPA phoneme, 20 ms frame span, confidence = mean posterior |
-
-`RecognizerSpec` (impl, unit, model id, revision, weight hash, dtype, chunking) must be
-identical on both streams or the session refuses to start (`RecognizerMismatchError`).
-Two backend instances are loaded (one per stream); `--share-weights` shares tensors.
-
-Streaming: every `hop_s`, the last `window_s` of audio is re-decoded. A token is emitted,
-once, when it ends before `window_end − resolve_margin_s`, starts past the window's
-left-edge guard, and the previous decode produced the same token within `agree_s`;
-anything overlapping an already-emitted token is dropped as a re-spelling. Both instances
-are serviced from one inference thread in a fixed order, so MLX is never entered
-concurrently. See *Tuning transcription* below for why the window is 30 s.
-
-### Comparison and score
-
-Tokens are held until *decidable* — a reference token once the live stream has resolved
-past `start + tolerance + max_lag`, a live token once the reference stream has resolved
-past `start + tolerance`. "Resolved" is each recognizer's promise that no further token
-will start before that time; it trails the decode by `frontier_lag_s`, so the verdict for
-a word lands roughly `margin + frontier_lag + hop` ≈ 9 s after it is sung. That delay is
-the price of not deciding a region one stream may still add a token to — deciding early
-is how a late-surfacing token turns one MATCH into a MISSED plus an INSERTED. The pending window is re-aligned with Levenshtein DP whose
-substitution cost carries lexical distance (0/1 for words, normalized edit distance over
-IPA characters for phonemes) and a timing penalty; unpairable pairs (outside
-`[−tolerance, tolerance + max_lag]`) cost ∞. A beat-late singer is still paired.
-
-| verdict | meaning |
+| | |
 |---|---|
-| `MATCH` | same token (word mode: same spelling or same sound), \|dt\| ≤ tolerance |
-| `FAIL_TIMING` | same token, late by up to tolerance + max_lag or early by up to tolerance + max_lead; worth `1 − timing_weight` |
-| `FAIL_LEXICAL` | paired in time, different token |
-| `FAIL_MISSED` | reference token with no live counterpart |
-| `FAIL_INSERTED` | live token with no reference counterpart |
-
-```
-match_rate = Σ points / Σ verdicts
-score      = 100 · match_rate · min(1, transport_position / reference_duration)
-```
-
-The score climbs from zero through the song and lands on `100 · match_rate`.
-
-Two policies that keep the score honest:
-
-- **After the reference vocal's last word, nothing is scored.** A live token that no
-  reference token seen so far could pair with waits until the reference stream has
-  finished (a later reference phrase may still arrive — an ad-lib during an instrumental
-  break *is* inserted once the next phrase shows up); if the reference ends without one,
-  the token is ignored and counted in the record's
-  `live_tokens_ignored_after_reference_end`. Talking over the outro does not cost points.
-  `score_past_reference_end` turns the old behaviour back on.
-- **Breath tokens are not words.** The word recognizer emits "uh"/"hmm"-type tokens on
-  sung intakes; both streams drop them in normalization.
-- **Homophones are the same word.** The word recognizer spells a sound however its
-  language model leans that moment — `for` on the reference, `four` on the singer. In
-  word mode two words match if their spellings or their Metaphone sound keys agree
-  (`offbook/compare/sound.py`; pure rules, no dictionary). Applied to both streams alike,
-  so it cannot favour either. `word_match: exact` turns it off.
-
-What the score does *not* do by default: reward timing inside the tolerance. Two singers
-who both land every word within 0.75 s score the same even if one is dead on and the
-other consistently half a second late. `graded_timing` changes that — inside the
-tolerance a match earns `1 − timing_weight·|dt|/tolerance`, continuous with FAIL_TIMING
-at the boundary — and it is the knob to turn if timing precision should count. On two
-real takes of the same 45 s song by two singers, one on the beat and one drifting
-0.2–0.6 s late then rushing the last phrase: flat scoring 84.7 vs 70.0, graded 79.9 vs
-62.0.
-
-## Tuning transcription
-
-Trust the reference transcript before trusting the score; the live vocal goes through
-exactly the same path. The diagnostic:
-
-```sh
-uv run offbook transcribe path/to/reference_vocal.wav --full            # word recognizer
-uv run offbook transcribe path/to/reference_vocal.wav --full --phoneme
-uv run offbook transcribe path/to/reference_vocal.wav --full --seconds 120 --window-s 20 --hop-s 1
-```
-
-It prints the streaming chunker's tokens with timestamps, then (`--full`) the recognizer's
-one-shot decode of the whole file — the best that model can do on that audio — and the
-chunker's token error rate against it. That separates the two things that can be wrong:
-
-- **Error rate high, one-shot transcript good** → the streaming path is losing tokens;
-  tune `--window-s`, `--hop-s`, `--margin-s`, `--agree-s`, `--edge-guard-s`.
-- **One-shot transcript itself poor** → the model can't read this vocal; try the other
-  recognizer, or a cleaner reference stem.
-
-How the defaults were chosen, on a real 5-minute sung publisher vocal (error rate of the
-streaming chunker against the one-shot decode; lower is better):
-
-| window / hop / margin | first 120 s | full song |
-|---|---|---|
-| 6 / 1 / 1 with the original frontier chunker | ≈ 0.6 | — |
-| 15 / 1 / 1.5 | 0.169 | — |
-| 20 / 2 / 2 | 0.091 | 0.191 |
-| 30 / 2 / 2 | 0.065 | 0.136 |
-| **30 / 2 / 3** (default) | 0.065 | 0.143 |
-
-Two things did the work: long windows (a 6 s window cuts phrases and starves the model of
-context) and *agreement* (recognizer timestamps jitter by 80–160 ms between overlapping
-windows; the original chunker's hard frontier dropped any token that re-decoded a hair
-earlier than the previous cut). parakeet-mlx's own cached streaming mode was tried and
-rejected: error rate above 0.8 on the same audio. With the defaults, replaying that vocal
-against itself scores 100.0 over 197 tokens. The phoneme recognizer through the same
-chunker sits at 0.10–0.17 against 30–60 s one-shot decodes (its one-shot decode of a
-5-minute file is itself degraded — wav2vec2 does not like long inputs — so compare it on
-`--seconds 60`).
-
-On a second, shorter vocal (45 s, clean diction) the default chunker matches the one-shot
-decode exactly: error rate 0.000, 56/56 tokens. Replaying a real 45 s performance of it
-against that reference: 87.7, where every failure is a genuine word difference between
-what was sung and what the reference has.
-
-Cost of the 30 s window: about 0.35 s of inference per 2 s hop per stream on the M4, so
-roughly a third of real time for both streams. A word's tokens are emitted `margin + hop`
-≈ 5 s after it is sung and its verdict lands ≈ 9 s after (see *Comparison and score*);
-the comparison aligns on transport timestamps, so this delays the readout, not the
-result.
-
-## Session record
-
-`sessions/<id>/session.json`, schema in [`schema/session.schema.json`](schema/session.schema.json)
-(generated by `offbook schema`; CI checks it is current). Top level:
-
-| field | |
-|---|---|
-| `session_id`, `started_at`, `mode` | `live` or `replay` |
-| `reference_path`, `backing_path`, `performance_wav_path` | inputs; the performance wav is what `replay` takes |
-| `transport_rate`, `reference_duration_s` | |
-| `recognizer` | `impl`, `unit`, `model_id`, `revision`, **`model_hash`**, `dtype` |
-| `config` | the full `SessionConfig` used |
-| `pairs[]` | every token pair: `reference` / `live` (`text`, `start_s`, `end_s`, `confidence`, `resolved_wall_s`) or null, `verdict`, `dt_s`, `score_after` |
-| `counts`, `match_rate`, `final_score` | |
-| `drift` | `duplex`, rates, 1 Hz `samples[]` of `{transport_s, drift_s}`, `max_abs_s`, `final_s` |
-| `session_duration_s`, `error` | |
-
-## Measured on this machine (MacBook Pro M4, 24 GB)
-
-Two recognizer instances resident, decoding a 30 s window each (the per-hop cost):
-
-| recognizer | dtype | MLX peak | decode per instance |
-|---|---|---|---|
-| parakeet | float32 | 5.8 GB | 334 ms |
-| parakeet | bfloat16 | 3.6 GB | 404 ms |
-| w2v2-phoneme | float32 | 3.8 GB | 497 ms |
-| w2v2-phoneme | bfloat16 | 2.7 GB | 516 ms |
-
-With the default 2 s hop that is 0.35–0.5 s of inference per second of audio for both
-streams together. Built-in mic ↔ built-in output drift measured at −3 µs over 8 s (shared
-clock). Replay of the same audio, three runs each in float32 and bfloat16: identical
-tokens, timestamps, confidences and score. A 5-minute sung reference vocal replayed
-against itself: 100.0, 197/197 MATCH.
-
-M2 Air / 16 GB: not measured here. The float32 parakeet configuration needs ~6 GB of
-unified memory for the two instances; `--dtype bfloat16` or `--share-weights` are the
-degrade paths. Run `uv run offbook replay` on a recorded performance there and watch that
-the `ref ▸ / live ▸` lines keep pace with the transport time.
+| [DESIGN.md](DESIGN.md) | the four invariants — no lyric text, no output route for the reference, typed roles, local and deterministic — and where each is enforced |
+| [docs/how-it-works.md](docs/how-it-works.md) | audio graph, recognizers, alignment, verdicts, the score, every config knob |
+| [docs/tuning.md](docs/tuning.md) | the transcription diagnostic, how the chunker defaults were chosen, measurements |
+| [docs/session-record.md](docs/session-record.md) | the JSON written after every session |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | how to work on it |
 
 ## Development
 
@@ -440,3 +252,9 @@ src/offbook/
 models.lock.json      pinned model ids, revisions, weight hashes
 schema/               session.schema.json
 ```
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE). The models are downloaded at first run and are not
+part of this repository: Parakeet-TDT is © NVIDIA under CC-BY-4.0, the wav2vec2-espeak
+checkpoint is © Meta under Apache-2.0. See [NOTICE](NOTICE).
