@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "offbook-web", "runtimeExecutable": "uv", "runtimeArgs": ["run", "offbook", "web"], "port": 8765 }
+  ]
+}

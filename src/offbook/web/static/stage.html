@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>off book — stage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Kabel Black: the face MTV set its lower-left credits in. Only the credits use it. */
+  @font-face {
+    font-family: "Kabel Black";
+    font-weight: normal; font-style: normal;
+    src: url(/static/fonts/KabelBlack-Regular.woff) format("woff"),
+         url(/static/fonts/KabelBlack-Regular.otf) format("opentype");
+  }
+  :root {
+    --cyan: #00FFE5; --magenta: #FF006B; --yellow: #FFFF00; --blue: #0099FF; --purple: #9D00FF;
+    --body: "Raleway", -apple-system, "Helvetica Neue", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --kabel: "Kabel Black", "Raleway", sans-serif;
+    /* Score → colour. 0 = red, 240 = blue; --sat drops to 0 while there is no score yet. */
+    --hue: 210; --sat: 70%; --lit: 12%;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: var(--body); color: #fff; cursor: none;
+    background: radial-gradient(ellipse 90% 70% at 50% 40%,
+                hsl(var(--hue) var(--sat) calc(var(--lit) + 16%)) 0%,
+                hsl(var(--hue) var(--sat) var(--lit)) 60%,
+                hsl(var(--hue) var(--sat) 4%) 100%);
+    transition: --hue 1.2s ease, --sat 1.2s ease;
+    position: relative;
+  }
+  @property --hue { syntax: "<number>"; inherits: true; initial-value: 210; }
+  @property --sat { syntax: "<percentage>"; inherits: true; initial-value: 70%; }
+  body.cursor { cursor: default; }
+
+  /* checkerboard + perspective grid, from the site's hero */
+  .checker {
+    position: fixed; inset: 0; z-index: 1; opacity: .12; pointer-events: none;
+    background-image:
+      linear-gradient(45deg, #fff 25%, transparent 25%), linear-gradient(-45deg, #fff 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #fff 75%), linear-gradient(-45deg, transparent 75%, #fff 75%);
+    background-size: 40px 40px; background-position: 0 0, 0 20px, 20px -20px, -20px 0px;
+    mix-blend-mode: overlay;
+  }
+  .grid {
+    position: fixed; bottom: 0; left: 50%; width: 160%; height: 55%; z-index: 2; pointer-events: none;
+    transform: translateX(-50%) perspective(500px) rotateX(60deg);
+    background-image: linear-gradient(0deg, rgba(0,255,229,.28) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,255,229,.28) 1px, transparent 1px);
+    background-size: 80px 80px;
+    mask-image: linear-gradient(to top, black 30%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to top, black 30%, transparent 100%);
+  }
+  /* scanlines + VHS tracking line, from the site's globals */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: .5;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.15) 0, rgba(0,0,0,.15) 1px, transparent 1px, transparent 2px);
+  }
+  body::after {
+    content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 8px; z-index: 9998; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.1) 0%, rgba(0,255,229,.3) 50%, rgba(255,255,255,.1) 100%);
+    mix-blend-mode: screen; animation: tracking 12s linear infinite;
+  }
+  @keyframes tracking { from { transform: translateY(-10px); } to { transform: translateY(100vh); } }
+
+  /* ---- stage layout -------------------------------------------------------------------- */
+  #stage { position: relative; z-index: 10; height: 100%; display: grid; grid-template-rows: 1fr auto 1fr; }
+  #stage > * { min-height: 0; }
+
+  #words {
+    align-self: end; padding: 0 6vw 2vh;
+    /* Overflow must fall off the bottom so scrollHeight can see it and the oldest words
+       get trimmed; the block still sits at the bottom of its grid row via align-self. */
+    display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 0 .35em;
+    max-height: 3.6em; overflow: hidden;
+    font-size: clamp(28px, 5.2vw, 84px); font-weight: 900; line-height: 1.2;
+    text-transform: uppercase; letter-spacing: -.01em;
+    text-shadow: 0 0 12px rgba(0,255,229,.7), 0 0 32px rgba(0,255,229,.35), 0 2px 0 rgba(0,0,0,.6);
+  }
+  #words span { animation: pop .28s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes pop { from { opacity: 0; transform: translateY(.25em) scale(.9); } to { opacity: 1; transform: none; } }
+
+  #wave { display: block; width: 100%; height: 30vh; }
+
+  #credits {
+    align-self: end; padding: 0 0 4.5vh 4.5vw;
+    font-family: var(--kabel); line-height: 1.12; text-transform: none;
+    text-shadow: 3px 3px 0 #000, 0 0 18px rgba(0,0,0,.6);
+    max-width: 70vw;
+  }
+  #credits .singer { font-size: clamp(24px, 3.4vw, 54px); }
+  #credits .title  { font-size: clamp(24px, 3.4vw, 54px); }
+  #credits .label  { font-size: clamp(14px, 1.6vw, 26px); opacity: .85; margin-top: .15em; }
+  #credits:empty { display: none; }
+
+  /* ---- idle / loading / final ----------------------------------------------------------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 20; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 0 8vw;
+  }
+  .overlay.on { display: flex; }
+  .brand {
+    font-size: clamp(56px, 13vw, 200px); font-weight: 900; line-height: .9; letter-spacing: -.03em; text-transform: uppercase;
+    background: linear-gradient(135deg, var(--cyan), var(--blue));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 20px rgba(0,255,229,.6)) drop-shadow(0 0 60px rgba(0,255,229,.35));
+    animation: flickerIn 1s ease-in-out;
+  }
+  .brand .alt {
+    background: linear-gradient(135deg, var(--magenta), #FF00FF);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 20px rgba(255,0,107,.6));
+  }
+  @keyframes flickerIn { 0%{opacity:0} 10%{opacity:1} 15%{opacity:0} 20%{opacity:1} 25%{opacity:0} 30%,100%{opacity:1} }
+  .sub {
+    margin-top: 2.2vh; font-family: var(--mono); font-weight: 600; letter-spacing: .25em; text-transform: uppercase;
+    font-size: clamp(12px, 1.5vw, 22px); color: var(--cyan); text-shadow: 0 0 10px var(--cyan);
+  }
+  .sub.pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #final .pct {
+    font-size: clamp(96px, 26vw, 380px); font-weight: 900; line-height: .9; letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums; color: #fff;
+    text-shadow: 0 0 24px rgba(255,255,255,.7), 0 0 80px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.55);
+    animation: flickerIn 1.2s ease-in-out;
+  }
+  #final .sub { color: var(--yellow); text-shadow: 0 0 12px var(--yellow); }
+</style>
+</head>
+<body>
+<div class="checker"></div>
+<div class="grid"></div>
+
+<div id="stage">
+  <div id="words"></div>
+  <canvas id="wave"></canvas>
+  <div id="credits"></div>
+</div>
+
+<div id="idle" class="overlay on">
+  <div class="brand">Off<br><span class="alt">Book</span></div>
+  <div class="sub">The stage is yours.</div>
+</div>
+<div id="loading" class="overlay">
+  <div class="brand">Off<br><span class="alt">Book</span></div>
+  <div class="sub pulse">Warming up the mic…</div>
+</div>
+<div id="final" class="overlay">
+  <div class="pct">—</div>
+  <div class="sub">Match</div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ---- state --------------------------------------------------------------------------
+let status = "idle", finalMatch = null;
+
+function show(name) {
+  for (const id of ["idle", "loading", "final"]) $(id).classList.toggle("on", id === name);
+}
+function setCredits(title, singer) {
+  const lines = [];
+  if (singer) lines.push(`<div class="singer">${esc(singer)}</div>`);
+  if (title) lines.push(`<div class="title">&ldquo;${esc(title)}&rdquo;</div>`);
+  if (lines.length) lines.push(`<div class="label">Waveform Karaoke &middot; Off Book</div>`);
+  $("credits").innerHTML = lines.join("");
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---- colour: match rate → hue. 0 % is red (0), 100 % is blue (240). -------------------
+function setMatch(rate) {
+  if (rate == null) {
+    document.documentElement.style.setProperty("--hue", 210);
+    document.documentElement.style.setProperty("--sat", "70%");
+    return;
+  }
+  const r = Math.max(0, Math.min(1, rate));
+  document.documentElement.style.setProperty("--hue", Math.round(240 * r));
+  document.documentElement.style.setProperty("--sat", "88%");
+}
+
+// ---- words: what the singer has sung, confirmed words only, last few lines ------------
+// The recognizer's unconfirmed guesses (the `tentative` event) are deliberately not shown:
+// nothing appears on the stage until it has actually been sung and resolved.
+const words = $("words");
+function trimWords() {
+  while (words.children.length > 1 && words.scrollHeight > words.clientHeight) words.removeChild(words.firstChild);
+}
+function appendResolved(toks) {
+  for (const t of toks) { const s = document.createElement("span"); s.textContent = t.text; words.appendChild(s); }
+  trimWords();
+}
+function resetPerformance() {
+  words.innerHTML = ""; target.fill(0); shown.fill(0); peak = 0.05; finalMatch = null; setMatch(null);
+}
+
+// ---- waveform: an oscilloscope trace of the mic, like the karaoke app's analyser view --
+// Each mic block arrives as 256 samples. The trace shown is eased toward the newest block
+// every animation frame (the app's Analyser does the same with smoothing: 0.8), so the
+// line flows between blocks instead of jumping, and holds still when the mic is silent.
+const canvas = $("wave"), ctx = canvas.getContext("2d");
+const POINTS = 256;
+const target = new Float32Array(POINTS), shown = new Float32Array(POINTS);
+let peak = 0.05;
+function pushFrames(frames) {
+  const f = frames[frames.length - 1];            // newest block wins; older ones are stale
+  if (!f || !f.pcm.length) return;
+  for (let i = 0; i < POINTS; i++) target[i] = f.pcm[Math.floor(i * f.pcm.length / POINTS)];
+}
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(canvas.clientWidth * dpr); canvas.height = Math.round(canvas.clientHeight * dpr);
+}
+window.addEventListener("resize", resize); resize();
+function draw() {
+  requestAnimationFrame(draw);
+  const W = canvas.width, H = canvas.height, mid = H / 2, dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, W, H);
+  if (status !== "running") return;
+  // Ease toward the newest block, and follow the loudest recent peak with a slow release
+  // so a quiet singer still fills the screen and a belt does not clip.
+  let p = 0.02;
+  for (let i = 0; i < POINTS; i++) {
+    shown[i] += (target[i] - shown[i]) * 0.35;
+    const a = Math.abs(shown[i]); if (a > p) p = a;
+  }
+  peak = p > peak ? p : peak * 0.99 + p * 0.01;
+  const gain = (H * 0.42) / peak;
+
+  const stroke = ctx.createLinearGradient(0, 0, W, 0);
+  stroke.addColorStop(0, "#00FFE5"); stroke.addColorStop(1, "#FF006B");
+  ctx.beginPath();
+  for (let i = 0; i < POINTS; i++) {
+    const x = (i / (POINTS - 1)) * W;
+    const y = mid - Math.max(-H * 0.48, Math.min(H * 0.48, shown[i] * gain));
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.shadowColor = "#00FFE5"; ctx.shadowBlur = 16 * dpr;
+  ctx.strokeStyle = stroke; ctx.lineWidth = 3 * dpr;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+draw();
+
+// ---- events -------------------------------------------------------------------------
+function setStatus(s) {
+  status = s;
+  if (s === "loading") { resetPerformance(); show("loading"); }
+  else if (s === "running") show(null);
+  else if (s === "done") { if (finalMatch != null) $("final").querySelector(".pct").textContent = Math.round(finalMatch * 100) + "%"; show(finalMatch != null ? "final" : "idle"); }
+  else show("idle");
+}
+function handle(ev) {
+  switch (ev.kind) {
+    case "status":
+      if ("title" in ev || "singer" in ev) setCredits(ev.title, ev.singer);
+      setStatus(ev.status);
+      break;
+    case "resolved":
+      if (ev.live.length) appendResolved(ev.live);
+      break;
+    case "verdict":
+      setMatch(ev.match_rate);
+      break;
+    case "final":
+      finalMatch = ev.match_rate; setMatch(ev.match_rate);
+      break;
+  }
+}
+// Both streams stay open for the life of the page; EventSource reconnects on its own if
+// the server restarts, and /api/events re-sends the current session's history.
+new EventSource("/api/events").onmessage = (m) => handle(JSON.parse(m.data));
+new EventSource("/api/stage/waveform").onmessage = (m) => pushFrames(JSON.parse(m.data).frames);
+
+// ---- boot / chrome ------------------------------------------------------------------
+(async () => {
+  try {
+    const s = await (await fetch("/api/session/status")).json();
+    if (s.request) setCredits(s.request.title, s.request.singer);
+    if (s.result && s.result.match_rate != null) finalMatch = s.result.match_rate;
+    setStatus(s.status);
+  } catch { setStatus("idle"); }
+})();
+// F for fullscreen; the pointer hides itself after a moment still.
+document.addEventListener("keydown", (e) => { if (e.key === "f" || e.key === "F") document.documentElement.requestFullscreen?.(); });
+let cursorTimer = null;
+document.addEventListener("mousemove", () => {
+  document.body.classList.add("cursor"); clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.remove("cursor"), 1500);
+});
+</script>
+</body>
+</html>

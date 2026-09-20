@@ -87,3 +87,60 @@ def test_event_console_emits_ticks_between_resolutions() -> None:
     kinds = [e["kind"] for e in iter(sink.get_nowait, None) if e]
     assert kinds.count("resolved") == 1
     assert 2 <= kinds.count("tick") <= 3
+
+
+def test_stage_page_and_font_are_served() -> None:
+    assert client.get("/stage").status_code == 200
+    assert "Kabel" in client.get("/stage").text
+    assert client.get("/static/fonts/KabelBlack-Regular.woff").status_code == 200
+
+
+def test_trace_decimates_evenly_and_keeps_endpoints() -> None:
+    import numpy as np
+
+    from offbook.web.events import trace
+
+    block = np.linspace(-1, 1, 1024, dtype=np.float32).reshape(-1, 1)
+    t = trace(block, points=256)
+    assert len(t) == 256 and t[0] == -1.0 and t[-1] == 1.0
+    assert t == sorted(t)
+    assert trace(np.zeros((0, 1), dtype=np.float32)) == []
+    assert len(trace(np.ones((7, 1), dtype=np.float32))) == 7  # short blocks pass through
+
+
+def test_waveform_buffer_hands_out_only_new_frames() -> None:
+    from offbook.web.events import WaveformBuffer
+
+    b = WaveformBuffer(maxlen=3)
+    seq, frames = b.since(0)
+    assert seq == 0 and frames == []
+    for i in range(5):
+        b.push({"i": i})
+    seq, frames = b.since(0)
+    assert [f["i"] for f in frames] == [2, 3, 4] and seq == 5  # ring dropped 0 and 1
+    b.push({"i": 5})
+    seq, frames = b.since(seq)
+    assert [f["i"] for f in frames] == [5] and seq == 6
+    assert b.since(seq) == (6, [])
+
+
+def test_event_console_feeds_live_audio_to_waveform_only() -> None:
+    import numpy as np
+
+    from offbook.web.events import WaveformBuffer
+
+    sink: queue.Queue[dict[str, object] | None] = queue.Queue()
+    wf = WaveformBuffer()
+    c = EventConsole(sink, waveform=wf)
+    c.live_audio(np.full((256, 1), 0.3, dtype=np.float32), 1.0)
+    _, frames = wf.since(0)
+    assert len(frames) == 1 and frames[0]["transport_s"] == 1.0
+    assert frames[0]["pcm"] == [0.3] * 256
+    assert sink.empty()  # never an event: the history must not carry audio
+    EventConsole(sink).live_audio(np.zeros((256, 1), dtype=np.float32), 1.0)  # no buffer: no-op
+
+
+def test_start_request_carries_stage_credits() -> None:
+    req = server.StartRequest(mode="live", reference="r.wav", title="Africa", singer="Toto")
+    assert req.title == "Africa" and req.singer == "Toto"
+    assert server.StartRequest(mode="live", reference="r.wav").title is None

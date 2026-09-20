@@ -13,14 +13,17 @@ class ChunkingConfig(BaseModel, frozen=True):
 
     Every `hop_s`, the last `window_s` of audio is re-decoded. A token is emitted once it
     ends before `window_end − resolve_margin_s`, starts past the window's left-edge guard,
-    and two consecutive decodes agree on it (same text, start within `agree_s`). Long
+    and two consecutive decodes agree on it (same text, start within `agree_s`). The
+    time from a word being sung to its verdict is roughly `resolve_margin_s + hop_s +
+    frontier_lag_s` (plus `confirm_timeout_s` when two decodes never agree), so those
+    four knobs are the readout's latency; `window_s` is the recognizer's accuracy. Long
     windows matter: the recognizers were tuned against one-shot decodes of full vocals,
     and 30 s windows get within a few percent of them; 6 s windows do not."""
 
     window_s: float = Field(default=30.0, gt=0, description="Audio re-decoded on every hop")
-    hop_s: float = Field(default=2.0, gt=0, description="New audio between decodes")
+    hop_s: float = Field(default=1.0, gt=0, description="New audio between decodes")
     resolve_margin_s: float = Field(
-        default=3.0, ge=0, description="Tokens ending within this of the window end stay tentative"
+        default=2.0, ge=0, description="Tokens ending within this of the window end stay tentative"
     )
     agree_s: float = Field(
         default=0.3,
@@ -33,12 +36,12 @@ class ChunkingConfig(BaseModel, frozen=True):
         description="Tokens starting within this of the window's left edge are ignored",
     )
     confirm_timeout_s: float = Field(
-        default=4.0,
+        default=2.0,
         ge=0,
         description="A token still unconfirmed this long past the resolve line is emitted anyway",
     )
     frontier_lag_s: float = Field(
-        default=4.0,
+        default=2.0,
         ge=0,
         description="resolved_until trails the resolve line by this, so tokens the recognizer "
         "produces late (phrase onsets after silence) still land ahead of it",

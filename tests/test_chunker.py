@@ -125,3 +125,29 @@ def test_resolved_until_is_a_promise() -> None:
         assert all(t.start.samples >= promised for t in toks)
         promised = rec.resolved_until.samples
     assert all(t.start.samples >= promised for t in rec.flush())
+
+
+def test_tentative_shows_unconfirmed_tokens_then_clears() -> None:
+    """A token the latest decode saw but has not confirmed is visible as tentative; once
+    emitted it leaves the tentative list. Tentative never contains an emitted token."""
+    cfg = ChunkingConfig(window_s=2.0, hop_s=0.5, resolve_margin_s=0.5, confirm_timeout_s=10.0)
+    pcm = _audio_with_spikes(3.0, {0.7: 0.9})
+    rec: Recognizer[Live] = Recognizer(Live, SpikeBackend(), cfg)
+    hop = int(0.5 * ANALYSIS_RATE)
+    seen_tentative = False
+    emitted: list[str] = []
+    for start in range(0, len(pcm), hop):
+        emitted += [
+            t.text
+            for t in rec.feed(
+                Frames(Live, pcm[start : start + hop], TransportTime(start, ANALYSIS_RATE))
+            )
+        ]
+        tent = [t.text for t in rec.tentative]
+        assert not (set(tent) & set(emitted))
+        if tent == ["t9"] and not emitted:
+            seen_tentative = True
+        if emitted:
+            assert tent == []
+    assert seen_tentative
+    assert emitted == ["t9"]

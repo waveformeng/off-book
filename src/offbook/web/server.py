@@ -19,10 +19,11 @@ from typing import Any, Literal
 import anyio
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from offbook.config import AlignmentConfig, RecognizerConfig, SessionConfig
-from offbook.web.events import Event, EventConsole
+from offbook.web.events import Event, EventConsole, WaveformBuffer
 
 STATIC = Path(__file__).parent / "static"
 AUDIO_SUFFIXES = {".wav", ".wave", ".flac", ".mp3", ".aiff", ".aif", ".ogg", ".opus", ".m4a"}
@@ -37,6 +38,9 @@ class StartRequest(BaseModel):
     output_device: int | None = None
     out_dir: str = "sessions"
     config: SessionConfig = SessionConfig()
+    # Shown on the stage view's lower-third credits. Not part of the session record.
+    title: str | None = Field(default=None, description="Song title, for the stage view")
+    singer: str | None = Field(default=None, description="Performer's name, for the stage view")
 
 
 class State:
@@ -51,6 +55,11 @@ class State:
         self.sink: queue.Queue[Event | None] = queue.Queue()
         self.result: dict[str, Any] | None = None
         self.started_wall: float | None = None
+        # Bumped on every start. A browser that has been subscribed to /api/events since a
+        # previous session (the stage view sits open all night) uses it to notice that the
+        # history it was replaying has been replaced.
+        self.generation = 0
+        self.waveform = WaveformBuffer()
 
     def push(self, event: Event) -> None:
         self.events.append(event)
@@ -72,6 +81,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="off book", docs_url=None, redoc_url=None, lifespan=_lifespan)
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 # --- pages -----------------------------------------------------------------------------
@@ -80,6 +90,13 @@ app = FastAPI(title="off book", docs_url=None, redoc_url=None, lifespan=_lifespa
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/stage")
+def stage() -> FileResponse:
+    """The performance view: the singer's waveform and words, the score as colour, the
+    credits. Nothing from the reference stream is ever sent to it."""
+    return FileResponse(STATIC / "stage.html")
 
 
 # --- lookups ---------------------------------------------------------------------------
@@ -199,7 +216,7 @@ def _run(req: StartRequest) -> None:
     )
     from offbook.session.runner import Session
 
-    console = EventConsole(state.sink, quiet=False)
+    console = EventConsole(state.sink, quiet=False, waveform=state.waveform)
     live: MicInput | LiveReplayFile = (
         MicInput(req.input_device)
         if req.mode == "live"
@@ -217,7 +234,14 @@ def _run(req: StartRequest) -> None:
     with state.lock:
         state.session = session
         state.status = "loading"
-    console.emit("status", status="loading", session_id=session.session_id)
+    console.emit(
+        "status",
+        status="loading",
+        session_id=session.session_id,
+        mode=req.mode,
+        title=req.title,
+        singer=req.singer,
+    )
     try:
         # The console header fires once the models are resident and the graph is up.
         _orig_header = console.header
@@ -268,6 +292,8 @@ def start(req: StartRequest) -> dict[str, Any]:
         state.events = []
         state.sink = queue.Queue()
         state.started_wall = time.time()
+        state.generation += 1
+        state.waveform = WaveformBuffer()
         state.thread = threading.Thread(target=_run, args=(req,), name="offbook-session")
         state.thread.start()
     return {"status": "loading"}
@@ -302,10 +328,13 @@ async def events() -> StreamingResponse:
 
     async def gen() -> AsyncIterator[str]:
         sent = 0
+        generation = state.generation
         while True:
             # Drain the worker's queue into the shared history under the lock, then
             # replay anything this subscriber hasn't seen.
             with state.lock:
+                if state.generation != generation:
+                    generation, sent = state.generation, 0
                 while True:
                     try:
                         ev = state.sink.get_nowait()
@@ -321,6 +350,27 @@ async def events() -> StreamingResponse:
             if not pending:
                 yield ": keepalive\n\n"
                 await anyio.sleep(0.15)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.get("/api/stage/waveform")
+async def stage_waveform() -> StreamingResponse:
+    """Server-sent events: the LIVE VOCAL's envelope, batched per frame. No history — a
+    subscriber gets what is captured from now on, and a new session restarts the ring."""
+
+    async def gen() -> AsyncIterator[str]:
+        seq = 0
+        buf = state.waveform
+        while True:
+            if state.waveform is not buf:
+                buf, seq = state.waveform, 0
+            seq, frames = buf.since(seq)
+            if frames:
+                yield f"data: {json.dumps({'frames': frames})}\n\n"
+            else:
+                yield ": keepalive\n\n"
+            await anyio.sleep(1 / 60)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
