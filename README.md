@@ -110,7 +110,8 @@ so you can watch either place.
 
 While it runs, the right-hand column shows the score climbing, match rate, transport
 position against the reference duration, ADC↔DAC drift, the model id/revision/hash, both
-streams appending as tokens resolve, and the verdict table (colour-coded, `dt` positive =
+streams appending as tokens resolve (with what the recognizer currently sees but has not
+confirmed shown dimmed at the end of each stream), and the verdict table (colour-coded, `dt` positive =
 late). When it finishes you get the counts and a link to the session JSON.
 
 **Past sessions** lists every record in the output directory with its JSON, and a
@@ -131,7 +132,7 @@ browser refresh mid-song reconnects and replays the readout so far.
 | `POST /api/session/start` | body: `{mode, reference, backing?, performance?, input_device?, output_device?, out_dir, config}` |
 | `POST /api/session/stop` | |
 | `GET /api/session/status` | `status`, `error`, `result` |
-| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tick`, `verdict`, `drift`, `final` |
+| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final` |
 | `GET /api/sessions?out_dir=` · `GET /api/sessions/{id}/record` | past records |
 
 ## Run from the terminal
@@ -188,11 +189,11 @@ All exposed on `run`/`replay`; defaults in `offbook/config.py`.
 | `graded_timing` (config/web) | off | inside the tolerance a MATCH earns `1 − timing_weight·|dt|/tolerance` instead of a flat 1 |
 | `--window-tokens` | 12 (phoneme: 48) | reference tokens held in the edit-distance window |
 | `--timing-weight` | 0.5 | weight of a `FAIL_TIMING` relative to a lexical failure (0–1) |
-| `--window-s` / `--hop-s` / `--margin-s` | 30 / 2 / 3 s | recognizer window, hop, and how much of the window's tail stays tentative |
+| `--window-s` / `--hop-s` / `--margin-s` | 30 / 1 / 2 s | recognizer window, hop, and how much of the window's tail stays tentative |
 | `--agree-s` | 0.3 s | two consecutive decodes must agree on a token (same text, start within this) before it is emitted |
 | `--edge-guard-s` | 1.0 s | tokens starting this close to a window's left edge are ignored (cut-off phrases decode badly) |
-| `confirm_timeout_s` (config/web) | 4 s | a token unconfirmed this long past the resolve line is emitted anyway |
-| `frontier_lag_s` (config/web) | 4 s | how far the stream's resolved frontier trails the resolve line, so late-surfacing tokens still land ahead of it |
+| `confirm_timeout_s` (config/web) | 2 s | a token unconfirmed this long past the resolve line is emitted anyway |
+| `frontier_lag_s` (config/web) | 2 s | how far the stream's resolved frontier trails the resolve line, so late-surfacing tokens still land ahead of it |
 | `score_past_reference_end` (config/web) | off | count what is sung after the reference vocal's last word as inserted; off = ignore it |
 | `--dtype` | float32 | MLX weight dtype (`bfloat16` halves memory) |
 | `--share-weights` | off | one weight set shared by the two recognizer instances |

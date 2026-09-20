@@ -46,6 +46,11 @@ class SessionConsole:
         line.append(" ".join(t.text for t in live) or "·", style="white")
         self.console.print(line)
 
+    def tentative(self, ref: list[Token[Reference]], live: list[Token[Live]], t_s: float) -> None:
+        """Tokens the recognizers currently see but have not confirmed. Called after every
+        block; the terminal readout ignores it (it would repeat every hop), the web UI
+        shows it dimmed ahead of the resolved tokens."""
+
     def verdict(self, pair: TokenPair, score: float) -> None:
         if self.quiet:
             return

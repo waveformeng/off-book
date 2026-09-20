@@ -55,6 +55,7 @@
   .stream b { display: block; font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .08em; margin-bottom: 4px; }
   .stream span { display: inline-block; margin-right: .5em; }
   .stream.ref span { color: var(--accent); }
+  .stream span.tent { opacity: .4; font-style: italic; }
   table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
   th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   td { padding: 3px 6px; border-bottom: 1px solid #1e252d; white-space: nowrap; }
@@ -391,6 +392,13 @@ function appendTokens(el, toks) {
   for (const t of toks) { const s = document.createElement("span"); s.textContent = t.text; s.title = `${t.start_s}s · conf ${t.confidence}`; el.appendChild(s); }
   el.parentElement.scrollTop = el.parentElement.scrollHeight;
 }
+// Tentative tokens: what the recognizer currently sees past the confirmed ones. Shown
+// dimmed after the resolved tokens and replaced wholesale on every event.
+function setTentative(el, toks) {
+  for (const s of el.querySelectorAll("span.tent")) s.remove();
+  for (const t of toks) { const s = document.createElement("span"); s.className = "tent"; s.textContent = t.text; s.title = `${t.start_s}s · unconfirmed`; el.appendChild(s); }
+  el.parentElement.scrollTop = el.parentElement.scrollHeight;
+}
 function handle(ev) {
   switch (ev.kind) {
     case "status":
@@ -406,7 +414,11 @@ function handle(ev) {
       break;
     case "resolved":
       setTransport(ev.transport_s);
+      setTentative($("s-ref"), []); setTentative($("s-live"), []);
       appendTokens($("s-ref"), ev.reference); appendTokens($("s-live"), ev.live);
+      break;
+    case "tentative":
+      setTentative($("s-ref"), ev.reference); setTentative($("s-live"), ev.live);
       break;
     case "verdict": {
       $("score").textContent = ev.score.toFixed(1);

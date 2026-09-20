@@ -32,6 +32,7 @@ class EventConsole(SessionConsole):
         self.sink = sink
         self.t0 = time.monotonic()
         self._last_tick = -1.0
+        self._last_tentative: tuple[list[Event], list[Event]] | None = None
 
     def emit(self, kind: str, **data: Any) -> None:
         self.sink.put({"kind": kind, "wall_s": round(time.monotonic() - self.t0, 3), **data})
@@ -69,6 +70,15 @@ class EventConsole(SessionConsole):
         elif t_s - self._last_tick >= 0.25:
             self.emit("tick", transport_s=round(t_s, 3))
             self._last_tick = t_s
+
+    def tentative(self, ref: list[Token[Reference]], live: list[Token[Live]], t_s: float) -> None:
+        # Recognizers only decode once per hop, so this is unchanged for most blocks; the
+        # event carries the whole current list (the UI replaces, never appends).
+        current = ([_token(t) for t in ref], [_token(t) for t in live])
+        if current == self._last_tentative:
+            return
+        self._last_tentative = current
+        self.emit("tentative", transport_s=round(t_s, 3), reference=current[0], live=current[1])
 
     def verdict(self, pair: TokenPair, score: float) -> None:
         super().verdict(pair, score)

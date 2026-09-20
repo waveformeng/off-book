@@ -19,6 +19,11 @@ token still waiting for confirmation (the confirm timeout bounds how far it can 
 A token that still turns up behind the promise is emitted anyway and counted in
 `late_tokens`; the aligner may or may not still have a partner for it.
 
+`tentative` is what the latest decode saw past the emitted tokens: tokens waiting for
+agreement or still inside the resolve margin. It exists for the readout only, so a word
+can be shown (dimmed) a hop or two before it is confirmed; nothing downstream of the
+recognizer consumes it and it is not part of the session record.
+
 Chunk boundaries are functions of sample counts only, so the same audio produces the
 same windows, the same tokens and the same timestamps every run, regardless of callback
 timing. The final flush emits everything left without requiring agreement.
@@ -71,6 +76,7 @@ class Recognizer(Generic[Role]):
         self._resolved_until = 0
         self._previous: list[_Abs] = []  # every token of the previous decode
         self._emitted: list[_Abs] = []  # emitted tokens still inside the window
+        self._tentative: list[_Abs] = []  # latest decode's not-yet-emitted tokens
         self.late_tokens = 0
         """Tokens emitted behind the promised frontier (see module docstring)."""
 
@@ -82,6 +88,12 @@ class Recognizer(Generic[Role]):
     def resolved_until(self) -> TransportTime:
         """Transport time before which no further tokens will be emitted on this stream."""
         return TransportTime(self._resolved_until, ANALYSIS_RATE)
+
+    @property
+    def tentative(self) -> list[Token[Role]]:
+        """Tokens the latest decode saw that are not confirmed yet, in time order. Display
+        only: they may change spelling or timing, or vanish, on the next decode."""
+        return [self._token(t, 0.0) for t in sorted(self._tentative, key=lambda t: t.start)]
 
     def feed(self, frames: Frames[Role]) -> list[Token[Role]]:
         if frames.role is not self.role:
@@ -127,6 +139,7 @@ class Recognizer(Generic[Role]):
         ]
         guard = window_start + self._edge if window_start > 0 else 0
         emitted: list[Token[Role]] = []
+        tentative: list[_Abs] = []
         earliest_pending: int | None = None  # start of the earliest token not emitted yet
         for t in current:
             if t.start < guard:
@@ -139,6 +152,7 @@ class Recognizer(Generic[Role]):
                 or any(self._same(p, t) for p in self._previous)
             )
             if not confirmed:
+                tentative.append(t)
                 if earliest_pending is None or t.start < earliest_pending:
                     earliest_pending = t.start
                 continue
@@ -148,6 +162,7 @@ class Recognizer(Generic[Role]):
             emitted.append(self._token(t, now))
 
         self._previous = current
+        self._tentative = tentative
         # The promise must survive the jitter a pending token's start can show next decode.
         frontier = resolve_line if final else resolve_line - self._lag
         if earliest_pending is not None:

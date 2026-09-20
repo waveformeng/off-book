@@ -183,6 +183,9 @@ class Session:
             live_tokens = live_stream.feed(block.live, last)
             transport_s = (block.start_frame + len(block.live)) / rate
             self.console.resolved(ref_tokens, live_tokens, transport_s)
+            self.console.tentative(
+                ref_stream.recognizer.tentative, live_stream.recognizer.tentative, transport_s
+            )
             aligner.add_reference(ref_tokens)
             aligner.add_live(live_tokens)
             if last:
