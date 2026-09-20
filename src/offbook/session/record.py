@@ -16,16 +16,18 @@ from offbook.roles import Live, Reference
 
 
 class TokenRecord(BaseModel, frozen=True):
-    text: str
+    text: str | None = Field(
+        description="null unless config.record_transcripts: token text is lyric text"
+    )
     start_s: float
     end_s: float
     confidence: float
     resolved_wall_s: float = Field(description="Wall-clock seconds since session start")
 
     @staticmethod
-    def of(t: Token[Reference] | Token[Live], wall0: float) -> TokenRecord:
+    def of(t: Token[Reference] | Token[Live], wall0: float, text: bool) -> TokenRecord:
         return TokenRecord(
-            text=t.text,
+            text=t.text if text else None,
             start_s=t.start.seconds,
             end_s=t.end.seconds,
             confidence=t.confidence,
@@ -41,10 +43,12 @@ class PairRecord(BaseModel, frozen=True):
     score_after: float = Field(description="Aggregate score after this verdict")
 
     @staticmethod
-    def of(p: TokenPair, score_after: float, wall0: float) -> PairRecord:
+    def of(p: TokenPair, score_after: float, wall0: float, text: bool) -> PairRecord:
         return PairRecord(
-            reference=TokenRecord.of(p.reference, wall0) if p.reference is not None else None,
-            live=TokenRecord.of(p.live, wall0) if p.live is not None else None,
+            reference=(
+                TokenRecord.of(p.reference, wall0, text) if p.reference is not None else None
+            ),
+            live=TokenRecord.of(p.live, wall0, text) if p.live is not None else None,
             verdict=p.verdict,
             dt_s=p.dt_s,
             score_after=score_after,
@@ -105,7 +109,7 @@ class CountsRecord(BaseModel, frozen=True):
 
 
 class SessionRecord(BaseModel, frozen=True):
-    schema_version: int = 1
+    schema_version: int = 2  # 2: token text is null unless config.record_transcripts
     session_id: str
     started_at: str = Field(description="ISO-8601 UTC")
     mode: str = Field(description="'live' (mic) or 'replay' (recorded performance)")

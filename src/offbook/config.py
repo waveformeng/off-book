@@ -104,3 +104,10 @@ class SessionConfig(BaseModel, frozen=True):
     recognizer: RecognizerConfig = RecognizerConfig()
     seed: int = 0
     drift_log_interval_s: float = 1.0
+    record_transcripts: bool = Field(
+        default=False,
+        description="Write token text into the session record. Off by default: the reference "
+        "stream's tokens are the lyrics, and so are the live stream's for every MATCH, so a "
+        "record with text is a lyric sheet on disk. Timing, confidence, verdicts and scores "
+        "are always recorded. Turn on for tuning work, on audio you are licensed to transcribe.",
+    )

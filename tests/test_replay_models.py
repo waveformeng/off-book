@@ -49,7 +49,7 @@ def test_replay_is_deterministic_and_scores_identical_audio_100(impl: str, tmp_p
 
     ref = _say(REFERENCE, tmp_path / "ref.wav")
     perf = _say(PERFORMANCE, tmp_path / "perf.wav")
-    cfg = SessionConfig(recognizer=RecognizerConfig(impl=impl))
+    cfg = SessionConfig(recognizer=RecognizerConfig(impl=impl), record_transcripts=True)
 
     def run(live: Path) -> dict[str, Any]:
         rec = Session(
