@@ -87,7 +87,8 @@
 <header>
   <h1>OFF BOOK</h1>
   <span class="sub">dual-stream scoring engine — control panel</span>
-  <span id="status" class="pill" style="margin-left:auto">idle</span>
+  <a href="/stage" target="_blank" class="sub" style="margin-left:auto">stage view ↗</a>
+  <span id="status" class="pill">idle</span>
 </header>
 
 <main>
@@ -99,6 +100,15 @@
       <button data-mode="replay">Replay (recorded performance)</button>
     </div>
     <p class="hint" id="modehint"><span class="warn">Closed-back headphones only.</span> The reference vocal is never played; the backing track goes to the output device; the mic must hear only the singer.</p>
+  </section>
+
+  <section>
+    <h2>Credits</h2>
+    <div class="grid2">
+      <div><label>Song title</label><input type="text" id="title" placeholder="shown on the stage view" style="font-family:inherit;font-size:inherit"></div>
+      <div><label>Singer</label><input type="text" id="singer" placeholder="performer's name" style="font-family:inherit;font-size:inherit"></div>
+    </div>
+    <p class="hint">Lower-left credits on the <a href="/stage" target="_blank">stage view</a>. Not written to the session record.</p>
   </section>
 
   <section>
@@ -364,8 +374,10 @@ $("start").onclick = async () => {
     output_device: mode === "live" ? Number($("output_device").value) : null,
     out_dir: $("out_dir").value.trim() || "sessions",
     config: buildConfig(),
+    title: $("title").value.trim() || null,
+    singer: $("singer").value.trim() || null,
   };
-  localStorage.setItem("offbook.form", JSON.stringify({ mode, impl, reference: body.reference, backing: $("backing").value, performance: $("performance").value, out_dir: body.out_dir }));
+  localStorage.setItem("offbook.form", JSON.stringify({ mode, impl, reference: body.reference, backing: $("backing").value, performance: $("performance").value, out_dir: body.out_dir, title: $("title").value, singer: $("singer").value }));
   try { await api("/api/session/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); setStatus("loading"); subscribe(); }
   catch (e) { setStatus("error", e.message); }
 };
@@ -421,7 +433,7 @@ function handle(ev) {
       setTentative($("s-ref"), ev.reference); setTentative($("s-live"), ev.live);
       break;
     case "verdict": {
-      $("score").textContent = ev.score.toFixed(1);
+      $("score").textContent = ev.score.toFixed(1); $("match_rate").textContent = ev.match_rate.toFixed(3);
       const tr = document.createElement("tr");
       const conf = ev.live ? ev.live.confidence : (ev.reference ? ev.reference.confidence : "");
       tr.innerHTML = `<td>${ev.reference ? ev.reference.text : "—"}</td><td>${ev.live ? ev.live.text : "—"}</td><td class="v-${ev.verdict}">${ev.verdict}</td><td class="r">${ev.dt_s == null ? "" : (ev.dt_s >= 0 ? "+" : "") + ev.dt_s.toFixed(2)}</td><td class="r">${conf}</td><td class="r">${ev.score.toFixed(1)}</td>`;
@@ -460,7 +472,7 @@ async function loadSessions() {
   defaults = await api("/api/config/defaults");
   const saved = JSON.parse(localStorage.getItem("offbook.form") || "{}");
   setMode(saved.mode || "live"); setImpl(saved.impl || "parakeet", false); applyDefaults();
-  for (const k of ["reference", "backing", "performance", "out_dir"]) if (saved[k]) $(k).value = saved[k];
+  for (const k of ["reference", "backing", "performance", "out_dir", "title", "singer"]) if (saved[k]) $(k).value = saved[k];
   await loadDevices(); await loadSessions();
   const s = await api("/api/session/status");
   setStatus(s.status, s.error);

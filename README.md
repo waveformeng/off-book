@@ -122,6 +122,31 @@ recognizer on the same take.
 One session at a time: a second Start while one is loading or running is refused. A
 browser refresh mid-song reconnects and replays the readout so far.
 
+### Stage view
+
+<http://127.0.0.1:8765/stage> is the other face of the same server: a full-screen
+performance display for the room, with nothing from the control panel on it. Put it on the
+venue's screen (press `F` for fullscreen; the cursor hides itself) and drive sessions from
+the control panel on the laptop. It shows exactly four things:
+
+- **The singer's waveform** — an oscilloscope trace of the mic, and only the mic. The
+  reference vocal has no route to it (`SessionConsole.live_audio` receives the live block
+  alone), and it goes out on its own stream, `/api/stage/waveform`, rather than into the
+  event history.
+- **The singer's words** — the LIVE stream's runtime transcript, confirmed words only.
+  Nothing appears until it has actually been sung and resolved; the recognizer's tentative
+  guesses are not shown, and the reference transcript is never sent to this page. Words
+  land ≈ 5 s after they are sung (see *Tuning transcription*); the waveform is live.
+- **The score, as colour** — the background sweeps red → blue with the running *match
+  rate* (the percentage), not the progress-scaled score, so it reflects how the singer is
+  doing now rather than how far into the song they are. Neutral until the first verdict.
+- **Credits, lower left** — *Song title* and *Singer* from the control panel's **Credits**
+  section, set in Kabel Black the way MTV ran its lower-third in the '80s. Not written to
+  the session record.
+
+When the session ends the final match percentage is revealed; the page then waits for the
+next session and picks it up without a reload.
+
 ### Endpoints, if you want to script it
 
 | | |
@@ -129,10 +154,11 @@ browser refresh mid-song reconnects and replays the readout so far.
 | `GET /api/devices` | audio devices |
 | `GET /api/browse?path=` | folders + audio files |
 | `GET /api/config/defaults` | word / phoneme default configs |
-| `POST /api/session/start` | body: `{mode, reference, backing?, performance?, input_device?, output_device?, out_dir, config}` |
+| `POST /api/session/start` | body: `{mode, reference, backing?, performance?, input_device?, output_device?, out_dir, config, title?, singer?}` |
 | `POST /api/session/stop` | |
 | `GET /api/session/status` | `status`, `error`, `result` |
 | `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final` |
+| `GET /stage` · `GET /api/stage/waveform` | the stage view, and its server-sent mic frames `{frames: [{transport_s, pcm[]}]}`, each block decimated to 256 samples (no history) |
 | `GET /api/sessions?out_dir=` · `GET /api/sessions/{id}/record` | past records |
 
 ## Run from the terminal

@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import queue
+import threading
 import time
+from collections import deque
 from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
 
 from offbook.asr.base import RecognizerSpec, Token
 from offbook.audio.drift import DriftSample
@@ -13,6 +18,44 @@ from offbook.roles import Live, Reference
 from offbook.session.console import SessionConsole
 
 Event = dict[str, Any]
+
+# Points the stage receives per mic block. The block is decimated, not averaged: the stage
+# draws it as an oscilloscope trace the way the karaoke app draws its analyser buffer, and
+# an averaged block would flatten the peaks that make a voice look like a voice.
+WAVEFORM_POINTS = 256
+
+
+class WaveformBuffer:
+    """The LIVE VOCAL's recent trace, for the stage view. Deliberately not an event: at
+    one block every ~20 ms it would swamp the history that `/api/events` replays to every
+    late-joining browser. Frames carry a sequence number so a subscriber polls for what it
+    has not yet seen; anything older than the ring is simply gone."""
+
+    def __init__(self, maxlen: int = 256) -> None:
+        self._lock = threading.Lock()
+        self._frames: deque[tuple[int, Event]] = deque(maxlen=maxlen)
+        self._seq = 0
+
+    def push(self, frame: Event) -> None:
+        with self._lock:
+            self._seq += 1
+            self._frames.append((self._seq, frame))
+
+    def since(self, seq: int) -> tuple[int, list[Event]]:
+        """Frames newer than `seq`, and the sequence number to ask from next time."""
+        with self._lock:
+            new = [f for s, f in self._frames if s > seq]
+            return self._seq, new
+
+
+def trace(block: NDArray[np.float32], points: int = WAVEFORM_POINTS) -> list[float]:
+    """A mono block decimated to at most `points` samples, evenly spaced."""
+    mono = np.asarray(block, dtype=np.float32).reshape(-1)
+    if mono.size == 0:
+        return []
+    if mono.size > points:
+        mono = mono[np.linspace(0, mono.size - 1, points).astype(int)]
+    return [round(float(v), 3) for v in mono]
 
 
 def _token(t: Token[Reference] | Token[Live]) -> Event:
@@ -27,9 +70,15 @@ def _token(t: Token[Reference] | Token[Live]) -> Event:
 class EventConsole(SessionConsole):
     """Emits every readout as an event; also prints to the terminal unless quiet."""
 
-    def __init__(self, sink: queue.Queue[Event | None], quiet: bool = True) -> None:
+    def __init__(
+        self,
+        sink: queue.Queue[Event | None],
+        quiet: bool = True,
+        waveform: WaveformBuffer | None = None,
+    ) -> None:
         super().__init__(quiet=quiet)
         self.sink = sink
+        self.waveform = waveform
         self.t0 = time.monotonic()
         self._last_tick = -1.0
         self._last_tentative: tuple[list[Event], list[Event]] | None = None
@@ -80,8 +129,13 @@ class EventConsole(SessionConsole):
         self._last_tentative = current
         self.emit("tentative", transport_s=round(t_s, 3), reference=current[0], live=current[1])
 
-    def verdict(self, pair: TokenPair, score: float) -> None:
-        super().verdict(pair, score)
+    def live_audio(self, block: NDArray[np.float32], t_s: float) -> None:
+        if self.waveform is None:
+            return
+        self.waveform.push({"transport_s": round(t_s, 3), "pcm": trace(block)})
+
+    def verdict(self, pair: TokenPair, score: float, match_rate: float) -> None:
+        super().verdict(pair, score, match_rate)
         self.emit(
             "verdict",
             reference=_token(pair.reference) if pair.reference is not None else None,
@@ -89,6 +143,7 @@ class EventConsole(SessionConsole):
             verdict=pair.verdict.value,
             dt_s=round(pair.dt_s, 3) if pair.dt_s is not None else None,
             score=round(score, 2),
+            match_rate=round(match_rate, 4),
         )
 
     def drift(self, s: DriftSample) -> None:

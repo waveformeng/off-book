@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+from numpy.typing import NDArray
 from rich.console import Console
 from rich.text import Text
 
@@ -51,7 +53,12 @@ class SessionConsole:
         block; the terminal readout ignores it (it would repeat every hop), the web UI
         shows it dimmed ahead of the resolved tokens."""
 
-    def verdict(self, pair: TokenPair, score: float) -> None:
+    def live_audio(self, block: NDArray[np.float32], t_s: float) -> None:
+        """The LIVE VOCAL block just captured, at the transport rate. Called for every
+        block; the terminal readout ignores it, the stage view draws it as a waveform.
+        Only the live stream is ever exposed this way — the reference has no such hook."""
+
+    def verdict(self, pair: TokenPair, score: float, match_rate: float) -> None:
         if self.quiet:
             return
         ref = pair.reference.text if pair.reference is not None else "—"

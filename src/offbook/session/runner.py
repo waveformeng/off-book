@@ -179,6 +179,7 @@ class Session:
             nonlocal drift_logged, transport_s
             if writer is not None:
                 writer.write(block.live)
+            self.console.live_audio(block.live, (block.start_frame + len(block.live)) / rate)
             ref_tokens = ref_stream.feed(block.reference, last)
             live_tokens = live_stream.feed(block.live, last)
             transport_s = (block.start_frame + len(block.live)) / rate
@@ -199,7 +200,7 @@ class Session:
                 score.add(p)
                 s = score.score(position_s)
                 pairs.append(PairRecord.of(p, s, wall0))
-                self.console.verdict(p, s)
+                self.console.verdict(p, s, score.match_rate)
             while drift_logged < len(graph.drift.samples):
                 self.console.drift(graph.drift.samples[drift_logged])
                 drift_logged += 1
