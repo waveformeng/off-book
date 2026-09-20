@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A design question
+    url: https://github.com/waveformeng/off-book/blob/main/DESIGN.md
+    about: Read the invariants first; if the question is whether one can bend, open an issue and say what for.
