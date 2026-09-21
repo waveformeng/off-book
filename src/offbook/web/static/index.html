@@ -187,6 +187,9 @@
       <button class="primary" id="start">Start session</button>
       <button class="danger" id="stop" disabled>Stop</button>
     </div>
+    <label style="margin-top:10px">Session record</label>
+    <select id="record_transcripts"><option value="false">timing, verdicts and scores only (default)</option><option value="true">also token text — the lyrics — for tuning</option></select>
+    <p class="hint">Token text is lyric text. Leave this off unless you are licensed to transcribe this audio and need the words in the record.</p>
     <div class="err" id="error"></div>
   </section>
 </div>
@@ -291,7 +294,7 @@ function buildConfig() {
   alignment.word_match = $("word_match").value;
   alignment.graded_timing = $("graded_timing").value === "true";
   for (const k of CHUNK) chunking[k] = Number($(k).value);
-  return { alignment, chunking, recognizer: { impl, dtype: $("dtype").value, share_weights: $("share_weights").value === "true" } };
+  return { alignment, chunking, recognizer: { impl, dtype: $("dtype").value, share_weights: $("share_weights").value === "true" }, record_transcripts: $("record_transcripts").value === "true" };
 }
 
 document.querySelectorAll("#mode button").forEach(b => b.onclick = () => setMode(b.dataset.mode));

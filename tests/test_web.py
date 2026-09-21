@@ -144,3 +144,33 @@ def test_start_request_carries_stage_credits() -> None:
     req = server.StartRequest(mode="live", reference="r.wav", title="Africa", singer="Toto")
     assert req.title == "Africa" and req.singer == "Toto"
     assert server.StartRequest(mode="live", reference="r.wav").title is None
+
+
+def test_record_omits_token_text_unless_asked() -> None:
+    from offbook.asr.base import Token
+    from offbook.clock import ANALYSIS_RATE, TransportTime
+    from offbook.compare.verdict import TokenPair, Verdict
+    from offbook.config import SessionConfig
+    from offbook.roles import Live, Reference
+    from offbook.session.record import PairRecord
+
+    assert SessionConfig().record_transcripts is False
+    ref = Token(
+        Reference,
+        "peanuts",
+        TransportTime(0, ANALYSIS_RATE),
+        TransportTime(1, ANALYSIS_RATE),
+        1.0,
+        5.0,
+    )
+    live = Token(
+        Live, "peanuts", TransportTime(0, ANALYSIS_RATE), TransportTime(1, ANALYSIS_RATE), 0.9, 5.0
+    )
+    pair = TokenPair(ref, live, Verdict.MATCH)
+    quiet = PairRecord.of(pair, 50.0, 0.0, text=False)
+    assert quiet.reference is not None and quiet.live is not None
+    assert quiet.reference.text is None and quiet.live.text is None
+    assert quiet.verdict is Verdict.MATCH and quiet.live.confidence == 0.9
+    assert "peanuts" not in quiet.model_dump_json()
+    loud = PairRecord.of(pair, 50.0, 0.0, text=True)
+    assert loud.reference is not None and loud.reference.text == "peanuts"

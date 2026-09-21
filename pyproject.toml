@@ -2,6 +2,9 @@
 name = "offbook"
 version = "0.1.0"
 description = "Waveform Karaoke — Off Book: dual-stream scoring engine"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12"
 dependencies = [
     "mlx>=0.30",

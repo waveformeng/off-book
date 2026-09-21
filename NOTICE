@@ -1,0 +1,30 @@
+Off Book — dual-stream scoring engine
+Copyright 2026 Waveform Karaoke
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This project does not bundle model weights. On first run (or `offbook check-models`)
+it downloads the following models from Hugging Face at the revisions pinned in
+models.lock.json and verifies their hashes. Each is subject to its own license:
+
+  parakeet-tdt-0.6b-v2
+    Author:   NVIDIA Corporation
+    Source:   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+    MLX port: https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v2
+    License:  Creative Commons Attribution 4.0 International (CC-BY-4.0)
+              https://creativecommons.org/licenses/by/4.0/
+    Used as the word-level recognizer ("A · Word").
+
+  wav2vec2-lv-60-espeak-cv-ft
+    Author:   Meta AI (Facebook AI Research)
+    Source:   https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft
+    License:  Apache License 2.0
+    Used as the phoneme-level recognizer ("B · Phoneme"). The checkpoint is read and
+    executed by an original MLX implementation in src/offbook/asr/mlx_wav2vec2/; no
+    code from the reference implementation is included.
+
+Word tokens are produced by parakeet-mlx (https://github.com/senstella/parakeet-mlx),
+installed as a dependency, not redistributed here.
+
+Audio inputs (reference vocals, backing tracks, performances) are never part of this
+repository. Session records are written locally and are gitignored.

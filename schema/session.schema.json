@@ -384,6 +384,12 @@
           "default": 1.0,
           "title": "Drift Log Interval S",
           "type": "number"
+        },
+        "record_transcripts": {
+          "default": false,
+          "description": "Write token text into the session record. Off by default: the reference stream's tokens are the lyrics, and so are the live stream's for every MATCH, so a record with text is a lyric sheet on disk. Timing, confidence, verdicts and scores are always recorded. Turn on for tuning work, on audio you are licensed to transcribe.",
+          "title": "Record Transcripts",
+          "type": "boolean"
         }
       },
       "title": "SessionConfig",
@@ -392,8 +398,16 @@
     "TokenRecord": {
       "properties": {
         "text": {
-          "title": "Text",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null unless config.record_transcripts: token text is lyric text",
+          "title": "Text"
         },
         "start_s": {
           "title": "Start S",
@@ -437,7 +451,7 @@
   },
   "properties": {
     "schema_version": {
-      "default": 1,
+      "default": 2,
       "title": "Schema Version",
       "type": "integer"
     },

@@ -199,7 +199,7 @@ class Session:
             for p in new_pairs:
                 score.add(p)
                 s = score.score(position_s)
-                pairs.append(PairRecord.of(p, s, wall0))
+                pairs.append(PairRecord.of(p, s, wall0, cfg.record_transcripts))
                 self.console.verdict(p, s, score.match_rate)
             while drift_logged < len(graph.drift.samples):
                 self.console.drift(graph.drift.samples[drift_logged])
@@ -222,7 +222,7 @@ class Session:
             else:
                 for p in aligner.finish():
                     score.add(p)
-                    pairs.append(PairRecord.of(p, score.score(0.0), wall0))
+                    pairs.append(PairRecord.of(p, score.score(0.0), wall0, cfg.record_transcripts))
         except KeyboardInterrupt:
             error = "interrupted"
         finally:

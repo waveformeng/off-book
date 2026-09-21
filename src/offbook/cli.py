@@ -27,6 +27,7 @@ def _config(
     share_weights: bool,
     agree_s: float | None = None,
     edge_guard_s: float | None = None,
+    record_transcripts: bool = False,
 ) -> SessionConfig:
     align: dict[str, Any] = dict(_PHONEME_ALIGNMENT) if phoneme else {}
     for k, v in (
@@ -56,6 +57,7 @@ def _config(
             dtype=dtype,
             share_weights=share_weights,
         ),
+        record_transcripts=record_transcripts,
     )
 
 
@@ -73,6 +75,13 @@ Dtype = Annotated[str, typer.Option(help="float32 | bfloat16 | float16")]
 Share = Annotated[bool, typer.Option("--share-weights", help="Share weights between instances")]
 OutDir = Annotated[Path, typer.Option(help="Where session records are written")]
 Quiet = Annotated[bool, typer.Option("--quiet", help="Only print the final result")]
+Transcripts = Annotated[
+    bool,
+    typer.Option(
+        "--record-transcripts",
+        help="Write token text (lyrics) into session.json; off by default",
+    ),
+]
 
 
 @app.command()
@@ -105,6 +114,7 @@ def run(
     share_weights: Share = False,
     out_dir: OutDir = Path("sessions"),
     quiet: Quiet = False,
+    record_transcripts: Transcripts = False,
 ) -> None:
     """Score a live performance from the mic against the reference vocal."""
     from offbook.audio.sources import BackingTrackFile, MicInput, ReferenceVocalFile
@@ -124,6 +134,7 @@ def run(
         share_weights,
         agree_s,
         edge_guard_s,
+        record_transcripts,
     )
     Session(
         cfg,
@@ -154,6 +165,7 @@ def replay(
     share_weights: Share = False,
     out_dir: OutDir = Path("sessions"),
     quiet: Quiet = False,
+    record_transcripts: Transcripts = False,
 ) -> None:
     """Re-score a recorded performance. No audio devices are opened."""
     from offbook.audio.sources import LiveReplayFile, ReferenceVocalFile
@@ -173,6 +185,7 @@ def replay(
         share_weights,
         agree_s,
         edge_guard_s,
+        record_transcripts,
     )
     Session(
         cfg,
