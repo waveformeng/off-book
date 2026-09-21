@@ -32,3 +32,7 @@ build/
 .idea/
 .vscode/
 .DS_Store
+
+# Claude Code: private working context and preview config; settings.json stays shareable
+.claude/*
+!.claude/settings.json
