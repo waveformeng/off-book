@@ -138,8 +138,9 @@ the control panel on the laptop. It shows exactly four things:
 
 - **The singer's waveform** — an oscilloscope trace of the mic, and only the mic. The
   reference vocal has no route to it (`SessionConsole.live_audio` receives the live block
-  alone), and it goes out on its own stream, `/api/stage/waveform`, rather than into the
-  event history.
+  alone), it is tapped on the capture thread so it follows the mic's clock rather than the
+  decoder's, and it goes out on its own stream, `/api/stage/waveform`, rather than into
+  the event history.
 - **The singer's words** — the LIVE stream's runtime transcript, confirmed words only.
   Nothing appears until it has actually been sung and resolved; the recognizer's tentative
   guesses are not shown, and the reference transcript is never sent to this page. Words
