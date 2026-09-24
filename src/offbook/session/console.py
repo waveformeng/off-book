@@ -56,7 +56,9 @@ class SessionConsole:
     def live_audio(self, block: NDArray[np.float32], t_s: float) -> None:
         """The LIVE VOCAL block just captured, at the transport rate. Called for every
         block; the terminal readout ignores it, the stage view draws it as a waveform.
-        Only the live stream is ever exposed this way — the reference has no such hook."""
+        In a live session this arrives on the capture thread (`AudioGraph.live_tap`), so
+        it must be cheap and must not block. Only the live stream is ever exposed this
+        way — the reference has no such hook."""
 
     def verdict(self, pair: TokenPair, score: float, match_rate: float) -> None:
         if self.quiet:

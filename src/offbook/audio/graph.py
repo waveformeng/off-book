@@ -15,6 +15,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, final
 
@@ -78,11 +79,18 @@ class AudioGraph:
         blocksize: int = 1024,
         drift_interval_s: float = 1.0,
         stop_after_frames: int | None = None,
+        live_tap: Callable[[NDArray[np.float32], float], None] | None = None,
     ) -> None:
+        """`live_tap(block, end_s)` is called on the capture thread with each LIVE block the
+        moment it is captured, ahead of the analysis queue. The stage waveform hangs off it:
+        the analysis loop stalls for a decode every hop, so a trace fed from there freezes
+        and jumps with the decoder instead of following the mic. Only the live block passes
+        through the tap — the reference is paced after it and never reaches it."""
         self.reference = reference
         self.rate = reference.rate
         self.live_source = live_source
         self.blocksize = blocksize
+        self._live_tap = live_tap
         self.blocks: queue.Queue[CapturedBlock | None] = queue.Queue()
         self._pacer = ReferencePacer(reference)
         self._mic_total = 0
@@ -195,6 +203,8 @@ class AudioGraph:
             live = np.ascontiguousarray(indata[:frames, 0], dtype=np.float32).copy()
             start = self._mic_total
             self._mic_total += frames
+            if self._live_tap is not None:
+                self._live_tap(live, self._mic_total / self.rate)
             reference = self._pacer.advance(frames, self._mic_total)
             if self._player is not None:
                 dac_frames, dac_time = self._player.last_block

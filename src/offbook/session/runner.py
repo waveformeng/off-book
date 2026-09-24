@@ -151,6 +151,7 @@ class Session:
             output_device=self.output_device,
             drift_interval_s=cfg.drift_log_interval_s,
             stop_after_frames=stop_after if mode == "live" else None,
+            live_tap=self.console.live_audio if mode == "live" else None,
         )
         graph.assert_reference_has_no_output_route()
         self._graph = graph
@@ -179,7 +180,11 @@ class Session:
             nonlocal drift_logged, transport_s
             if writer is not None:
                 writer.write(block.live)
-            self.console.live_audio(block.live, (block.start_frame + len(block.live)) / rate)
+            if mode == "replay":
+                # A replay file has no clock of its own: it is read into the queue at once,
+                # so this loop's pace is the only one the trace can follow. A mic is tapped
+                # at capture instead (see AudioGraph.live_tap).
+                self.console.live_audio(block.live, (block.start_frame + len(block.live)) / rate)
             ref_tokens = ref_stream.feed(block.reference, last)
             live_tokens = live_stream.feed(block.live, last)
             transport_s = (block.start_frame + len(block.live)) / rate

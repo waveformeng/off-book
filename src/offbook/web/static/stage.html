@@ -159,7 +159,9 @@
 const $ = (id) => document.getElementById(id);
 
 // ---- state --------------------------------------------------------------------------
-let status = "idle", finalMatch = null;
+let status = "idle", finalMatch = null, holdTimer = null;
+// How long the match card stays up after the last word before the stage clears itself.
+const FINAL_HOLD_MS = 8000;
 
 function show(name) {
   for (const id of ["idle", "loading", "final"]) $(id).classList.toggle("on", id === name);
@@ -198,6 +200,12 @@ function appendResolved(toks) {
 }
 function resetPerformance() {
   words.innerHTML = ""; target.fill(0); shown.fill(0); peak = 0.05; finalMatch = null; setMatch(null);
+}
+// Back to the default screen: nothing of the last take survives, so the next singer walks
+// up to a clean stage.
+function resetStage() {
+  clearTimeout(holdTimer); holdTimer = null;
+  resetPerformance(); setCredits(null, null); show("idle");
 }
 
 // ---- waveform: an oscilloscope trace of the mic, like the karaoke app's analyser view --
@@ -252,10 +260,15 @@ draw();
 // ---- events -------------------------------------------------------------------------
 function setStatus(s) {
   status = s;
+  clearTimeout(holdTimer); holdTimer = null;
   if (s === "loading") { resetPerformance(); show("loading"); }
   else if (s === "running") show(null);
-  else if (s === "done") { if (finalMatch != null) $("final").querySelector(".pct").textContent = Math.round(finalMatch * 100) + "%"; show(finalMatch != null ? "final" : "idle"); }
-  else show("idle");
+  else if (s === "done" && finalMatch != null) {
+    $("final").querySelector(".pct").textContent = Math.round(finalMatch * 100) + "%";
+    show("final");
+    holdTimer = setTimeout(resetStage, FINAL_HOLD_MS);
+  }
+  else resetStage();
 }
 function handle(ev) {
   switch (ev.kind) {
@@ -276,17 +289,27 @@ function handle(ev) {
 }
 // Both streams stay open for the life of the page; EventSource reconnects on its own if
 // the server restarts, and /api/events re-sends the current session's history.
-new EventSource("/api/events").onmessage = (m) => handle(JSON.parse(m.data));
 new EventSource("/api/stage/waveform").onmessage = (m) => pushFrames(JSON.parse(m.data).frames);
 
 // ---- boot / chrome ------------------------------------------------------------------
 (async () => {
+  let skip = "";
   try {
     const s = await (await fetch("/api/session/status")).json();
-    if (s.request) setCredits(s.request.title, s.request.singer);
-    if (s.result && s.result.match_rate != null) finalMatch = s.result.match_rate;
-    setStatus(s.status);
+    // A take that already ended is over: open to the default screen, not its old score,
+    // and don't let the event history re-run it either.
+    const active = s.status === "loading" || s.status === "running";
+    if (active && s.request) setCredits(s.request.title, s.request.singer);
+    if (!active && s.generation != null) skip = "?skip=" + s.generation;
+    setStatus(active ? s.status : "idle");
   } catch { setStatus("idle"); }
+  const es = new EventSource("/api/events" + skip);
+  es.onmessage = (m) => handle(JSON.parse(m.data));
+  // The stage is left open across sessions, and across server restarts. A reconnect
+  // means the server went away: reload so the page is the one the server now serves,
+  // booted fresh, rather than old script replaying new history.
+  let opens = 0;
+  es.onopen = () => { if (++opens > 1) location.reload(); };
 })();
 // F for fullscreen; the pointer hides itself after a moment still.
 document.addEventListener("keydown", (e) => { if (e.key === "f" || e.key === "F") document.documentElement.requestFullscreen?.(); });

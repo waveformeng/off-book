@@ -138,8 +138,9 @@ the control panel on the laptop. It shows exactly four things:
 
 - **The singer's waveform** — an oscilloscope trace of the mic, and only the mic. The
   reference vocal has no route to it (`SessionConsole.live_audio` receives the live block
-  alone), and it goes out on its own stream, `/api/stage/waveform`, rather than into the
-  event history.
+  alone), it is tapped on the capture thread so it follows the mic's clock rather than the
+  decoder's, and it goes out on its own stream, `/api/stage/waveform`, rather than into
+  the event history.
 - **The singer's words** — the LIVE stream's runtime transcript, confirmed words only.
   Nothing appears until it has actually been sung and resolved; the recognizer's tentative
   guesses are not shown, and the reference transcript is never sent to this page. Words
@@ -163,8 +164,8 @@ next session and picks it up without a reload.
 | `GET /api/config/defaults` | word / phoneme default configs |
 | `POST /api/session/start` | body: `{mode, reference, backing?, performance?, input_device?, output_device?, out_dir, config, title?, singer?}` |
 | `POST /api/session/stop` | |
-| `GET /api/session/status` | `status`, `error`, `result` |
-| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final` |
+| `GET /api/session/status` | `status`, `error`, `result`, `generation` |
+| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final`; history first, unless `?skip=<generation>` names the take already on record |
 | `GET /stage` · `GET /api/stage/waveform` | the stage view, and its server-sent mic frames `{frames: [{transport_s, pcm[]}]}`, each block decimated to 256 samples (no history) |
 | `GET /api/sessions?out_dir=` · `GET /api/sessions/{id}/record` | past records |
 
