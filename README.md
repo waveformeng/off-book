@@ -3,46 +3,6 @@
 [![ci](https://github.com/waveformeng/off-book/actions/workflows/ci.yml/badge.svg)](https://github.com/waveformeng/off-book/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Waveform Karaoke's *Off Book* mode: a singer performs from memory, no lyrics on screen.
-This is the engine underneath. It plays nothing but the backing track, transcribes the
-publisher's **reference vocal** and the singer's **live vocal** through the *same*
-recognizer at the same time, aligns the two token streams on a shared transport clock,
-and keeps a running score.
-
-Vocabulary, used exactly:
-
-| term | meaning |
-|---|---|
-| **REFERENCE VOCAL** | the publisher's licensed vocal demo. Ground truth. Read from file, decoded in software, **never played** |
-| **LIVE VOCAL** | the mic. The thing being scored |
-| **TRACK** | a song: one reference vocal, many performances |
-
-## Hard constraints, and where they are enforced
-
-1. **No lyric text.** Nothing in this repo ingests, stores, derives or outputs written
-   lyrics. Ground truth is the reference *audio*, transcribed at runtime by the same
-   recognizer that transcribes the singer, and the tokens are consumed in memory. Session
-   records hold timing, confidence, verdicts and scores — not the words — unless
-   `record_transcripts` is switched on for tuning work. `sessions/` is gitignored.
-2. **The reference vocal never reaches an output device.** It is decoded to an in-memory
-   `ReferencePCM` that has no array interface and no play path. The only object that can
-   feed an output stream is `_BackingPlayer`, which accepts only `BackingPCM`. The graph
-   asserts this at session start (`AudioGraph.assert_reference_has_no_output_route`), and
-   every `sounddevice` output entry point is wrapped so nothing outside
-   `offbook.audio.graph` can open one (`offbook.audio.guard`). If the reference were ever
-   audible the mic would capture it and every score would come back near-perfect while
-   measuring nothing — hence the closed-headphone requirement below.
-3. **Fully local.** MLX on Apple Silicon. The only network access is `offbook check-models`
-   (or the first run), which downloads the pinned model revisions from Hugging Face.
-4. **Deterministic.** Greedy decoding only; model revisions and weight hashes pinned in
-   `models.lock.json` and verified at load; recognizer windows are cut on sample counts,
-   never wall clock; fixed seeds. The model hash is written into every session record.
-   `tests/test_replay_models.py` replays the same audio twice and asserts identical tokens,
-   timestamps, confidences and score.
-5. **Audio files are inputs, never committed.** See `.gitignore`.
-
-[DESIGN.md](DESIGN.md) states each of these with the code and the test that enforces it.
-
 ## Setup
 
 Requires macOS on Apple Silicon and [uv](https://docs.astral.sh/uv/).
@@ -59,7 +19,7 @@ The first phoneme-model run converts the PyTorch checkpoint to MLX safetensors u
 
 ## The closed-headphone requirement
 
-**Run live sessions with closed-back headphones. Never with speakers.**
+**Run live sessions with closed-back headphones for better performance.**
 
 The backing track goes to the headphones. The reference vocal goes nowhere. The mic must
 hear only the singer: if the mic hears the backing track the live stream is polluted, and
