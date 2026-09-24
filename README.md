@@ -164,8 +164,8 @@ next session and picks it up without a reload.
 | `GET /api/config/defaults` | word / phoneme default configs |
 | `POST /api/session/start` | body: `{mode, reference, backing?, performance?, input_device?, output_device?, out_dir, config, title?, singer?}` |
 | `POST /api/session/stop` | |
-| `GET /api/session/status` | `status`, `error`, `result` |
-| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final` |
+| `GET /api/session/status` | `status`, `error`, `result`, `generation` |
+| `GET /api/events` | server-sent events: `status`, `header`, `resolved`, `tentative`, `tick`, `verdict`, `drift`, `final`; history first, unless `?skip=<generation>` names the take already on record |
 | `GET /stage` · `GET /api/stage/waveform` | the stage view, and its server-sent mic frames `{frames: [{transport_s, pcm[]}]}`, each block decimated to 256 samples (no history) |
 | `GET /api/sessions?out_dir=` · `GET /api/sessions/{id}/record` | past records |
 

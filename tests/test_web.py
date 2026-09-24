@@ -3,6 +3,7 @@
 import queue
 from pathlib import Path
 
+import anyio
 from fastapi.testclient import TestClient
 
 from offbook.web import server
@@ -174,3 +175,31 @@ def test_record_omits_token_text_unless_asked() -> None:
     assert "peanuts" not in quiet.model_dump_json()
     loud = PairRecord.of(pair, 50.0, 0.0, text=True)
     assert loud.reference is not None and loud.reference.text == "peanuts"
+
+
+def _first_line(skip: int | None) -> str:
+    """The first thing /api/events sends. Read straight off the generator: the stream
+    never ends, and the test client cannot close it."""
+
+    async def first() -> str:
+        gen = aiter((await server.events(skip)).body_iterator)
+        try:
+            line = await anext(gen)
+            return line if isinstance(line, str) else bytes(line).decode()
+        finally:
+            await gen.aclose()  # type: ignore[attr-defined]
+
+    return anyio.run(first)
+
+
+def test_events_skip_drops_the_finished_takes_history() -> None:
+    with server.state.lock:
+        server.state.generation += 1
+        server.state.events = [{"kind": "status", "status": "loading"}]
+        server.state.sink = queue.Queue()
+        server.state.sink.put({"kind": "status", "status": "done"})  # emitted, not yet drained
+    gen = client.get("/api/session/status").json()["generation"]
+    assert gen == server.state.generation
+    assert _first_line(gen).startswith(": keepalive")
+    assert _first_line(None).startswith("data:")  # a plain subscriber replays it
+    assert _first_line(gen - 1).startswith("data:")  # an older take is replayed

@@ -319,16 +319,20 @@ def status() -> dict[str, Any]:
             "result": state.result,
             "request": state.request.model_dump() if state.request else None,
             "started_wall": state.started_wall,
+            "generation": state.generation,
         }
 
 
 @app.get("/api/events")
-async def events() -> StreamingResponse:
-    """Server-sent events: history first, then live."""
+async def events(skip: int | None = None) -> StreamingResponse:
+    """Server-sent events: history first, then live. `skip` names a generation (from
+    `/api/session/status`) whose history the subscriber does not want — the stage view
+    uses it so a page opened after a take has ended does not re-run that take."""
 
     async def gen() -> AsyncIterator[str]:
         sent = 0
         generation = state.generation
+        first = True
         while True:
             # Drain the worker's queue into the shared history under the lock, then
             # replay anything this subscriber hasn't seen.
@@ -343,6 +347,9 @@ async def events() -> StreamingResponse:
                     if ev is not None:
                         state.push(ev)
                 history = state.events
+                if first and skip == generation:
+                    sent = len(history)  # after the drain, so a trailing "done" is skipped too
+                first = False
                 pending = history[sent:]
                 sent = len(history)
             for ev in pending:
@@ -378,4 +385,6 @@ async def stage_waveform() -> StreamingResponse:
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # The event streams never end on their own; without a deadline, Ctrl-C would wait on
+    # every open stage and control-panel tab before the process exits.
+    uvicorn.run(app, host=host, port=port, log_level="warning", timeout_graceful_shutdown=1)
