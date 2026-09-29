@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -75,10 +76,12 @@ class EventConsole(SessionConsole):
         sink: queue.Queue[Event | None],
         quiet: bool = True,
         waveform: WaveformBuffer | None = None,
+        header_hook: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(quiet=quiet)
         self.sink = sink
         self.waveform = waveform
+        self.header_hook = header_hook
         self.t0 = time.monotonic()
         self._last_tick = -1.0
         self._last_tentative: tuple[list[Event], list[Event]] | None = None
@@ -90,6 +93,10 @@ class EventConsole(SessionConsole):
         self, spec: RecognizerSpec, mode: str, duplex: bool, rate: int, reference_duration_s: float
     ) -> None:
         super().header(spec, mode, duplex, rate, reference_duration_s)
+        if self.header_hook is not None:
+            # The header fires once the models are resident and the graph is up — the web
+            # server uses this to flip its status pill without wrapping `header` itself.
+            self.header_hook()
         self.emit(
             "header",
             mode=mode,

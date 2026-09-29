@@ -70,7 +70,10 @@ so you can watch either place.
 4. **Recognizer** — *A · Word* (Parakeet) or *B · Phoneme* (wav2vec2). Switching loads
    that recognizer's defaults; every alignment and chunking knob (all of them in
    [docs/how-it-works.md](docs/how-it-works.md#config-knobs)) is editable, **Reset to
-   defaults** puts them back.
+   defaults** puts them back. Word mode is the better recognizer: on a real sung vocal its
+   streaming error rate against the one-shot decode is ≈ 0.065, while phoneme mode sits at
+   0.10–0.17 and degrades further on long files (wav2vec2 does not like long inputs — see
+   [docs/tuning.md](docs/tuning.md)). Use word mode unless you have a reason not to.
 5. **Start session**. The status pill goes `loading` (models coming resident, ~5 s) →
    `running` → `done`. **Stop** ends a session early; the record is still written with
    `"error": "stopped"`.
@@ -101,10 +104,12 @@ the control panel on the laptop. It shows exactly four things:
   alone), it is tapped on the capture thread so it follows the mic's clock rather than the
   decoder's, and it goes out on its own stream, `/api/stage/waveform`, rather than into
   the event history.
-- **The singer's words** — the LIVE stream's runtime transcript, confirmed words only.
-  Nothing appears until it has actually been sung and resolved; the recognizer's tentative
-  guesses are not shown, and the reference transcript is never sent to this page. Words
-  land ≈ 5 s after they are sung (see [docs/tuning.md](docs/tuning.md)); the waveform is live.
+- **The singer's words** — the LIVE stream's runtime transcript: confirmed words at full
+  brightness, and the recognizer's current unconfirmed guesses dimmed at the end of the
+  line (they may re-spell or vanish on the next decode). Nothing from the reference
+  stream is ever shown. Confirmed words land ≈ 5 s after they are sung (see
+  [docs/tuning.md](docs/tuning.md)); the waveform and the dimmed tail keep moving in the
+  meantime.
 - **The score, as colour** — the background sweeps red → blue with the running *match
   rate* (the percentage), not the progress-scaled score, so it reflects how the singer is
   doing now rather than how far into the song they are. Neutral until the first verdict.

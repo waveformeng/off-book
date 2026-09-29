@@ -84,6 +84,10 @@
   }
   #words span { animation: pop .28s cubic-bezier(.2,1.4,.4,1) both; }
   @keyframes pop { from { opacity: 0; transform: translateY(.25em) scale(.9); } to { opacity: 1; transform: none; } }
+  /* The recognizer's current guesses, dimmed at the end of the line. They may re-spell or
+     vanish on the next decode — no entrance animation (they are rebuilt every event), and
+     the reduced glow says "not confirmed yet". */
+  #words span.tent { animation: none; opacity: .38; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
 
   #wave { display: block; width: 100%; height: 30vh; }
 
@@ -187,15 +191,35 @@ function setMatch(rate) {
   document.documentElement.style.setProperty("--sat", "88%");
 }
 
-// ---- words: what the singer has sung, confirmed words only, last few lines ------------
-// The recognizer's unconfirmed guesses (the `tentative` event) are deliberately not shown:
-// nothing appears on the stage until it has actually been sung and resolved.
+// ---- words: what the singer has sung, last few lines ----------------------------------
+// Confirmed words at full brightness; the recognizer's current guesses (the `tentative`
+// event) dimmed at the end of the line, so the stage keeps moving in the ~5 s before a
+// word resolves. The guesses are LIVE-stream only — nothing from the reference is shown.
 const words = $("words");
 function trimWords() {
-  while (words.children.length > 1 && words.scrollHeight > words.clientHeight) words.removeChild(words.firstChild);
+  // Never trim into the unconfirmed tail: early in a song it may be all that is on screen.
+  while (words.children.length > 1 && words.scrollHeight > words.clientHeight) {
+    const first = words.firstChild;
+    if (first.classList.contains("tent")) break;
+    words.removeChild(first);
+  }
 }
+// Resolved words are older than whatever is still pending, so they go in front of the
+// dimmed tail — otherwise a late-arriving confirmed word would render after its guesses.
 function appendResolved(toks) {
-  for (const t of toks) { const s = document.createElement("span"); s.textContent = t.text; words.appendChild(s); }
+  const anchor = words.querySelector("span.tent");
+  for (const t of toks) {
+    const s = document.createElement("span");
+    s.textContent = t.text;
+    words.insertBefore(s, anchor);
+  }
+  trimWords();
+}
+// The event carries the whole current list, so replace: a guess that resolved drops out,
+// one that re-spelled changes in place.
+function setTentative(toks) {
+  for (const s of words.querySelectorAll("span.tent")) s.remove();
+  for (const t of toks) { const s = document.createElement("span"); s.className = "tent"; s.textContent = t.text; words.appendChild(s); }
   trimWords();
 }
 function resetPerformance() {
@@ -278,6 +302,9 @@ function handle(ev) {
       break;
     case "resolved":
       if (ev.live.length) appendResolved(ev.live);
+      break;
+    case "tentative":
+      setTentative(ev.live);
       break;
     case "verdict":
       setMatch(ev.match_rate);

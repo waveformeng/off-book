@@ -141,6 +141,30 @@ def test_event_console_feeds_live_audio_to_waveform_only() -> None:
     EventConsole(sink).live_audio(np.zeros((256, 1), dtype=np.float32), 1.0)  # no buffer: no-op
 
 
+def test_event_console_header_hook_fires_before_the_header_event() -> None:
+    import queue
+
+    from offbook.asr.base import RecognizerSpec
+    from offbook.config import ChunkingConfig
+    from offbook.web.events import EventConsole
+
+    sink: queue.Queue[dict[str, object] | None] = queue.Queue()
+    calls: list[str] = []
+    c = EventConsole(sink, header_hook=lambda: calls.append("hook"))
+    spec = RecognizerSpec("fake", "word", "m", "rev", "hash", "float32", ChunkingConfig())
+    c.header(spec, "replay", False, 16_000, 45.0)
+    assert calls == ["hook"]
+    events = []
+    while True:
+        try:
+            e = sink.get_nowait()
+        except queue.Empty:
+            break
+        if e is not None:
+            events.append(e)
+    assert [e["kind"] for e in events] == ["header"]
+
+
 def test_start_request_carries_stage_credits() -> None:
     req = server.StartRequest(mode="live", reference="r.wav", title="Africa", singer="Toto")
     assert req.title == "Africa" and req.singer == "Toto"
