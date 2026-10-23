@@ -63,6 +63,12 @@ Never commit audio, session records or model weights. `.gitignore` covers the ob
 extensions; if you add a format, add it there too. Reference vocals in particular are
 licensed material — test fixtures are generated (`say`, on macOS) rather than recorded.
 
+One more thing about streams: `audio/guard.py` wraps every sounddevice entry point that
+can reach an output device — including the input-capable ones like `sd.Stream` and
+`playrec`. Anything outside `offbook.audio.graph` opening a stream raises
+`UnauthorizedOutputError`, so tests should keep using the generated fixtures rather than
+opening real streams.
+
 ## Reporting a problem
 
 Use the issue templates. For a scoring complaint, the session record (with

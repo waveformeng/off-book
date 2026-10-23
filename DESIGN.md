@@ -24,9 +24,10 @@ discarded.
   the live tokens for every `MATCH`, so a record with text would be a lyric sheet.
   Recording text is an explicit opt-in for tuning work on audio you are licensed to
   transcribe. See [docs/session-record.md](docs/session-record.md).
-- The stage view (`/stage`) shows only the *live* stream's confirmed words — what the
-  singer actually sang — and never the reference stream. The control panel shows both
-  streams transiently, to the operator, for diagnosis; nothing it shows is persisted.
+- The stage view (`/stage`) shows only the *live* stream — confirmed words at full
+  brightness plus the recognizer's current unconfirmed guesses, dimmed — and never the
+  reference stream. The control panel shows both streams transiently, to the operator, for
+  diagnosis; nothing it shows is persisted.
 - Session output (`sessions/`) and all audio are gitignored, so none of it can reach the
   repository by accident.
 
