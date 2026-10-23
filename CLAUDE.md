@@ -14,7 +14,7 @@ backlog) that is not part of the public repo.
 uv sync                                   # deps, locked
 uv run offbook check-models               # ~3.7 GB, once; verifies pinned hashes
 uv run offbook web                        # control panel :8765, stage view at /stage
-uv run offbook replay REF.wav PERF.wav    # deterministic re-score, no audio devices
+uv run offbook replay REF.wav PERF.wav    # deterministic re-score, no audio devices; ≈1.5× real time (docs/tuning.md)
 uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy && uv run pytest
 OFFBOOK_MODEL_TESTS=1 uv run pytest tests/test_replay_models.py   # real models, ~20 s
 uv run offbook schema                     # regenerate schema/session.schema.json

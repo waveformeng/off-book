@@ -216,7 +216,14 @@ def _run(req: StartRequest) -> None:
     )
     from offbook.session.runner import Session
 
-    console = EventConsole(state.sink, quiet=False, waveform=state.waveform)
+    def _on_header() -> None:
+        # The header fires once the models are resident and the graph is up. No session id:
+        # the "loading" status above already carried it, and this one only flips the pill.
+        with state.lock:
+            state.status = "running"
+        console.emit("status", status="running")
+
+    console = EventConsole(state.sink, quiet=False, waveform=state.waveform, header_hook=_on_header)
     live: MicInput | LiveReplayFile = (
         MicInput(req.input_device)
         if req.mode == "live"
@@ -243,16 +250,6 @@ def _run(req: StartRequest) -> None:
         singer=req.singer,
     )
     try:
-        # The console header fires once the models are resident and the graph is up.
-        _orig_header = console.header
-
-        def header(*a: Any, **k: Any) -> None:
-            with state.lock:
-                state.status = "running"
-            console.emit("status", status="running", session_id=session.session_id)
-            _orig_header(*a, **k)
-
-        console.header = header  # type: ignore[method-assign]
         record = session.run()
         with state.lock:
             state.status = "error" if record.error and record.error != "stopped" else "done"
